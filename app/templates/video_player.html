@@ -26,6 +26,9 @@
                     <button class="btn btn-outline btn-sm" onclick="showReportModal()">
                         <i class="fas fa-flag"></i>
                     </button>
+                    <button class="btn btn-outline btn-sm" id="moderateRemoveBtn" style="display:none;" onclick="showModerationModal()">
+                        <i class="fas fa-user-shield"></i>
+                    </button>
                     <button class="btn btn-primary btn-sm" onclick="createRoomForVideo()">
                         <i class="fas fa-users"></i> Комната
                     </button>
@@ -83,11 +86,32 @@
     </div>
 </div>
 
+
+<div id="moderationModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('moderationModal')">&times;</span>
+        <h2><i class="fas fa-user-shield"></i> Модерация видео</h2>
+        <form onsubmit="submitModerationRemove(event)">
+            <div class="form-group">
+                <label>Причина удаления</label>
+                <select id="moderationReason" required></select>
+            </div>
+            <div class="form-group" id="moderationOtherGroup" style="display:none;">
+                <label>Комментарий</label>
+                <textarea id="moderationOtherText" maxlength="500" rows="3" placeholder="Уточните причину..."></textarea>
+            </div>
+            <div id="moderationError" class="error-message"></div>
+            <button type="submit" class="btn btn-danger btn-block">Снять с публикации</button>
+        </form>
+    </div>
+</div>
+
+
 <script>
 const videoId = {{ video_id }};
 let currentVideo = null, currentChannel = null, currentUser = null, isSubscribed = false, subscriptionId = null;
 
-document.addEventListener('DOMContentLoaded', function() { checkUserAuth(); loadVideo(); });
+document.addEventListener('DOMContentLoaded', async function() { await checkUserAuth(); await loadVideo(); });
 
 async function checkUserAuth() {
     const token = localStorage.getItem('token');
@@ -95,9 +119,70 @@ async function checkUserAuth() {
         try {
             const r = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
             if (r.ok) currentUser = await r.json();
+            updateModerationUI();
         } catch (e) {}
     }
 }
+
+
+function updateModerationUI() {
+    const btn = document.getElementById('moderateRemoveBtn');
+    if (!btn) return;
+    const can = currentUser && (currentUser.is_admin || currentUser.is_moderator);
+    btn.style.display = can ? 'inline-flex' : 'none';
+}
+
+async function showModerationModal() {
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    try {
+        const r = await fetch('/api/videos/moderation/reasons');
+        if (r.ok) {
+            const reasons = await r.json();
+            const sel = document.getElementById('moderationReason');
+            sel.innerHTML = reasons.map(x => `<option value="${x.code}">${escapeHtml(x.name)}</option>`).join('');
+            sel.onchange = () => {
+                const v = sel.value;
+                document.getElementById('moderationOtherGroup').style.display = (v === 'other') ? 'block' : 'none';
+            };
+            sel.onchange();
+        }
+    } catch (e) {}
+    document.getElementById('moderationError').classList.remove('show');
+    showModal('moderationModal');
+}
+
+async function submitModerationRemove(e) {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    const reason_code = document.getElementById('moderationReason').value;
+    const reason_text = (document.getElementById('moderationOtherText').value || '').trim();
+    const errDiv = document.getElementById('moderationError');
+    errDiv.classList.remove('show');
+
+    try {
+        const r = await fetch('/api/videos/' + videoId + '/moderate/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ reason_code, reason_text })
+        });
+        if (r.ok) {
+            closeModal('moderationModal');
+            showNotification('Видео снято с публикации', 'success');
+            setTimeout(() => window.location.href = '/', 800);
+        } else {
+            const data = await r.json();
+            errDiv.textContent = (data.error && data.error.message) ? data.error.message : 'Ошибка';
+            errDiv.classList.add('show');
+        }
+    } catch (e) {
+        errDiv.textContent = 'Ошибка подключения';
+        errDiv.classList.add('show');
+    }
+}
+
+
 
 async function loadVideo() {
     try {

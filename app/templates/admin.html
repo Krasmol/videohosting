@@ -57,10 +57,11 @@ async function loadUsers() {
             <div class="admin-row">
                 <div class="admin-cell"><span class="admin-user-name">${esc(u.display_name)}</span><small>${esc(u.tag)}</small></div>
                 <div class="admin-cell"><small>${u.email}</small></div>
-                <div class="admin-cell">${u.is_admin ? '<span class="badge badge-admin">Admin</span>' : ''}${u.is_vip ? '<span class="badge badge-vip">VIP</span>' : ''}</div>
+                <div class="admin-cell">${u.is_admin ? '<span class="badge badge-admin">Admin</span>' : ''}${u.is_moderator ? '<span class="badge badge-mod">Mod</span>' : ''}${u.is_vip ? '<span class="badge badge-vip">VIP</span>' : ''}</div>
                 <div class="admin-cell">${u.mexels} M</div>
                 <div class="admin-cell admin-actions">
                     <button class="btn-sm-action" onclick="toggleVip(${u.id}, ${!u.is_vip})">${u.is_vip ? 'Убрать VIP' : 'Дать VIP'}</button>
+                    ${!u.is_admin ? `<button class="btn-sm-action" onclick="toggleModerator(${u.id}, ${!u.is_moderator})">${u.is_moderator ? 'Убрать модера' : 'Дать модера'}</button>` : ''}
                     ${!u.is_admin ? `<button class="btn-sm-action btn-danger" onclick="deleteUser(${u.id})">Удалить</button>` : ''}
                 </div>
             </div>
@@ -89,6 +90,11 @@ async function loadReports() {
             </div>
         `).join('')}</div>`;
     } catch (e) {}
+}
+
+async function toggleModerator(uid, val) {
+    await fetch(`/api/admin/users/${uid}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }, body: JSON.stringify({ is_moderator: val }) });
+    loadUsers(); loadStats();
 }
 
 async function toggleVip(uid, val) {
