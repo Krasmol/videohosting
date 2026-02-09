@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}Комната — ZTUBE{% endblock %}
+{% block content %}
+
+<div id="authOverlay" class="room-auth-overlay">
+    <div class="room-auth-box">
+        <i class="fas fa-lock" style="font-size:3rem;margin-bottom:1rem;color:#667eea;"></i>
+        <h2>Требуется авторизация</h2>
+        <p>Войдите или зарегистрируйтесь чтобы присоединиться к комнате</p>
+        <div style="display:flex;gap:1rem;margin-top:1.5rem;">
+            <button class="btn btn-primary" onclick="showLoginModal()">Войти</button>
+            <button class="btn btn-outline" onclick="showRegisterModal()">Регистрация</button>
+        </div>
+    </div>
+</div>
+
+<div class="room-container" id="roomContainer" style="display:none;">
+    <div class="room-video-section">
+        <div class="room-header-bar">
+            <h2 id="roomName">Комната</h2>
+            <div class="room-header-actions">
+                <button class="btn btn-outline btn-sm" id="deleteRoomBtn" style="display:none;" onclick="deleteRoom()">
+                    <i class="fas fa-trash"></i> Удалить
+                </button>
+            </div>
+        </div>
+        <div class="video-player-wrapper">
+            <video id="roomVideoPlayer" controls>
+                <source id="roomVideoSource" src="" type="video/mp4">
+            </video>
+            <div id="controlsMsg" class="controls-message" style="display:none;">
+                Управление видео доступно только владельцу комнаты
+            </div>
+        </div>
+        <div class="room-video-info">
+            <h2 id="videoTitle">Загрузка...</h2>
+            <p id="videoDescription"></p>
+        </div>
+        <div class="room-controls">
+            <button class="btn btn-outline" onclick="leaveRoom()">
+                <i class="fas fa-sign-out-alt"></i> Покинуть
+            </button>
+            <button class="btn btn-outline" onclick="showInviteModal()">
+                <i class="fas fa-user-plus"></i> Пригласить
+            </button>
+            <button class="btn btn-outline" onclick="shareRoom()">
+                <i class="fas fa-share"></i> Поделиться
+            </button>
+        </div>
+    </div>
+    <div class="room-sidebar">
+        <div class="participants-section">
+            <h3><i class="fas fa-users"></i> Участники (<span id="participantCount">0</span>)</h3>
+            <div id="participantsList" class="participants-list">
+                <div class="loading-small">Загрузка...</div>
+            </div>
+        </div>
+        <div class="chat-section">
+            <h3><i class="fas fa-comments"></i> Чат</h3>
+            <div id="chatMessages" class="chat-messages">
+                <div class="chat-welcome">
+                    <i class="fas fa-comments"></i>
+                    <p>Добро пожаловать в комнату!</p>
+                    <small>Начните общение с другими участниками</small>
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="chatInput" placeholder="Сообщение..." onkeypress="if(event.key==='Enter')sendMessage()">
+                <button class="btn btn-primary" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="inviteModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('inviteModal')">&times;</span>
+        <h2><i class="fas fa-user-plus"></i> Пригласить</h2>
+        <div class="invite-link-section">
+            <label>Ссылка:</label>
+            <div class="invite-link-box">
+                <input type="text" id="inviteLink" readonly>
+                <button class="btn btn-primary" onclick="copyInviteLink()"><i class="fas fa-copy"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+const roomId = {{ room_id }};
+let currentUser = null, currentRoom = null, socket = null, videoPlayer = null, isOwner = false, isSyncing = false;
+let participantInterval = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    videoPlayer = document.getElementById('roomVideoPlayer');
+    initPage();
+});
+
+window.addEventListener('beforeunload', () => {
+    if (socket && socket.connected) {
+        socket.emit('leave_room_event', { room_id: roomId });
+        socket.disconnect();
+    }
+    const token = localStorage.getItem('token');
+    if (token) {
+        navigator.sendBeacon('/api/rooms/' + roomId + '/beacon-leave?token=' + token);
+    }
+});
+
+async function initPage() {
+    const token = localStorage.getItem('token');
+    if (!token) {
+        document.getElementById('authOverlay').style.display = 'flex';
+        document.getElementById('roomContainer').style.display = 'none';
+        return;
+    }
+    try {
+        const r = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!r.ok) {
+            localStorage.removeItem('token');
+            document.getElementById('authOverlay').style.display = 'flex';
+            document.getElementById('roomContainer').style.display = 'none';
+            return;
+        }
+        currentUser = await r.json();
+        document.getElementById('authOverlay').style.display = 'none';
+        document.getElementById('roomContainer').style.display = 'grid';
+        await loadRoom();
+        initializeWebSocket();
+        participantInterval = setInterval(loadParticipants, 3000);
+    } catch (e) {
+        document.getElementById('authOverlay').style.display = 'flex';
+        document.getElementById('roomContainer').style.display = 'none';
+    }
+}
+
+function initializeWebSocket() {
+    const token = localStorage.getItem('token');
+    socket = io({
+        transports: ['polling', 'websocket'], upgrade: true,
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000
+    });
+    socket.on('connect', () => {
+        socket.emit('join_room', { room_id: roomId, token: token });
+    });
+    socket.on('connect_error', (err) => { console.log('Socket error:', err.message); });
+    socket.on('error', (d) => { showNotification(d.message, 'error'); });
+    socket.on('room_state', (d) => {
+        currentRoom = d;
+        isOwner = d.owner_id === currentUser.id;
+        if (videoPlayer) {
+            videoPlayer.currentTime = d.current_position;
+            if (d.is_playing) videoPlayer.play().catch(() => {});
+            else videoPlayer.pause();
+        }
+        updateOwnerControls();
+    });
+    socket.on('user_joined', (d) => { addChatMessage('Система', (d.display_name || d.username) + ' присоединился', true); loadParticipants(); });
+    socket.on('user_left', (d) => { addChatMessage('Система', (d.display_name || d.username) + ' покинул комнату', true); loadParticipants(); });
+    socket.on('play_event', (d) => { if (!isSyncing && videoPlayer) { isSyncing = true; videoPlayer.currentTime = d.position; videoPlayer.play().catch(() => {}); setTimeout(() => isSyncing = false, 200); } });
+    socket.on('pause_event', (d) => { if (!isSyncing && videoPlayer) { isSyncing = true; videoPlayer.currentTime = d.position; videoPlayer.pause(); setTimeout(() => isSyncing = false, 200); } });
+    socket.on('seek_event', (d) => { if (!isSyncing && videoPlayer) { isSyncing = true; videoPlayer.currentTime = d.position; setTimeout(() => isSyncing = false, 200); } });
+    socket.on('state_sync', (d) => { if (videoPlayer && Math.abs(videoPlayer.currentTime - d.position) > 3) videoPlayer.currentTime = d.position; });
+    socket.on('chat_message_event', (d) => { addChatMessage(d.display_name || d.username, d.message); });
+    if (videoPlayer) {
+        videoPlayer.addEventListener('play', () => { if (isOwner && !isSyncing && socket && socket.connected) socket.emit('play', { room_id: roomId, position: videoPlayer.currentTime }); });
+        videoPlayer.addEventListener('pause', () => { if (isOwner && !isSyncing && socket && socket.connected) socket.emit('pause', { room_id: roomId, position: videoPlayer.currentTime }); });
+        videoPlayer.addEventListener('seeked', () => { if (isOwner && !isSyncing && socket && socket.connected) socket.emit('seek', { room_id: roomId, position: videoPlayer.currentTime }); });
+        setInterval(() => { if (!isOwner && socket && socket.connected) socket.emit('sync_request', { room_id: roomId }); }, 5000);
+    }
+}
+
+function updateOwnerControls() {
+    if (isOwner) {
+        document.getElementById('deleteRoomBtn').style.display = 'inline-flex';
+        document.getElementById('controlsMsg').style.display = 'none';
+        if (videoPlayer) videoPlayer.controls = true;
+    } else {
+        if (videoPlayer) videoPlayer.controls = false;
+        document.getElementById('controlsMsg').style.display = 'block';
+    }
+}
+
+async function loadRoom() {
+    try {
+        const r = await fetch('/api/rooms/' + roomId);
+        if (!r.ok) { showNotification('Комната не найдена', 'error'); setTimeout(() => window.location.href = '/rooms', 2000); return; }
+        currentRoom = await r.json();
+        document.getElementById('roomName').textContent = currentRoom.name || ('Комната #' + currentRoom.id);
+        const vr = await fetch('/api/videos/' + currentRoom.video_id);
+        if (vr.ok) {
+            const video = await vr.json();
+            document.getElementById('videoTitle').textContent = video.title;
+            document.getElementById('videoDescription').textContent = video.description || '';
+            const token = localStorage.getItem('token');
+            const sr = await fetch('/api/videos/' + video.id + '/stream', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+            if (sr.ok) { const sd = await sr.json(); document.getElementById('roomVideoSource').src = sd.stream_url; document.getElementById('roomVideoPlayer').load(); }
+        }
+        document.getElementById('inviteLink').value = window.location.href;
+    } catch (e) { showNotification('Ошибка загрузки', 'error'); }
+}
+
+async function loadParticipants() {
+    try {
+        const r = await fetch('/api/rooms/' + roomId);
+        if (!r.ok) return;
+        const room = await r.json();
+        const ps = room.participants || [];
+        document.getElementById('participantCount').textContent = ps.length;
+        const list = document.getElementById('participantsList');
+        if (ps.length === 0) { list.innerHTML = '<div class="no-participants">Нет участников</div>'; return; }
+        list.innerHTML = ps.map(p => '<div class="participant-item ' + (p.user_id === room.owner_id ? 'host' : '') + '">' +
+            '<div class="participant-avatar"><i class="fas fa-user"></i></div>' +
+            '<div class="participant-info"><span class="participant-name">' + escapeHtml(p.display_name || ('Пользователь #' + p.user_id)) + '</span>' +
+            (p.tag ? '<small style="color:var(--text-dim)">' + escapeHtml(p.tag) + '</small>' : '') +
+            (p.user_id === room.owner_id ? '<span class="host-badge">Хост</span>' : '') +
+            '</div>' +
+            (currentUser && currentUser.id === room.owner_id && p.user_id !== room.owner_id ?
+                '<button class="btn-kick" onclick="kickUser(' + p.user_id + ')" title="Выгнать"><i class="fas fa-times"></i></button>' : '') +
+            '</div>').join('');
+    } catch (e) {}
+}
+
+function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    if (!socket || !socket.connected) { showNotification('Подключение к чату... Подождите', 'warning'); return; }
+    socket.emit('chat_message', { room_id: roomId, message: msg });
+    input.value = '';
+}
+
+function addChatMessage(username, message, isSystem) {
+    const container = document.getElementById('chatMessages');
+    const el = document.createElement('div');
+    el.className = isSystem ? 'chat-message system-message' : 'chat-message';
+    if (isSystem) {
+        el.innerHTML = '<div class="message-text" style="text-align:center;color:var(--text-dim);font-style:italic;">' + escapeHtml(message) + '</div>';
+    } else {
+        el.innerHTML = '<div class="message-header"><span class="message-author">' + escapeHtml(username) + '</span><span class="message-time">' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) + '</span></div><div class="message-text">' + escapeHtml(message) + '</div>';
+    }
+    const welcome = container.querySelector('.chat-welcome');
+    if (welcome) welcome.remove();
+    container.appendChild(el);
+    container.scrollTop = container.scrollHeight;
+}
+
+async function leaveRoom() {
+    if (socket && socket.connected) { socket.emit('leave_room_event', { room_id: roomId }); socket.disconnect(); }
+    const token = localStorage.getItem('token');
+    try { await fetch('/api/rooms/' + roomId + '/leave', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }); } catch (e) {}
+    if (participantInterval) clearInterval(participantInterval);
+    window.location.href = '/rooms';
+}
+
+async function deleteRoom() {
+    if (!confirm('Удалить комнату?')) return;
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/rooms/' + roomId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+        if (r.ok) { showNotification('Комната удалена', 'success'); setTimeout(() => window.location.href = '/rooms', 1000); }
+        else { const d = await r.json(); showNotification(d.error.message, 'error'); }
+    } catch (e) {}
+}
+
+async function kickUser(userId) {
+    if (!confirm('Выгнать?')) return;
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/rooms/' + roomId + '/kick/' + userId, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+        if (r.ok) { showNotification('Выгнан', 'success'); loadParticipants(); }
+        else { const d = await r.json(); showNotification(d.error.message, 'error'); }
+    } catch (e) {}
+}
+
+function showInviteModal() { showModal('inviteModal'); }
+function copyInviteLink() { navigator.clipboard.writeText(document.getElementById('inviteLink').value); showNotification('Скопировано!', 'success'); }
+function shareRoom() { if (navigator.share) navigator.share({ title: 'ZTUBE Комната', url: window.location.href }); else copyInviteLink(); }
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+</script>
+
+<style>
+.room-auth-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,14,39,0.95);z-index:500;align-items:center;justify-content:center}
+.room-auth-box{text-align:center;background:var(--glass);backdrop-filter:blur(40px);border:1px solid var(--border);border-radius:24px;padding:3rem;max-width:450px}
+.room-auth-box h2{font-size:1.5rem;margin-bottom:0.5rem}
+.room-auth-box p{color:var(--text-dim);margin-bottom:1rem}
+.room-container{display:grid;grid-template-columns:1fr 400px;gap:2rem;padding:2rem;max-width:1800px;margin:0 auto;height:calc(100vh - 80px)}
+.room-video-section{display:flex;flex-direction:column;gap:1.5rem;min-height:0}
+.room-header-bar{display:flex;justify-content:space-between;align-items:center}
+.room-header-bar h2{font-size:1.5rem;font-weight:700}
+.video-player-wrapper{background:#000;border-radius:20px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.5);position:relative;max-height:70vh;display:flex;align-items:center;justify-content:center}
+.video-player-wrapper video{width:100%;max-height:70vh;object-fit:contain;display:block}
+.controls-message{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);padding:10px 20px;border-radius:8px;font-size:14px;pointer-events:none}
+.room-video-info{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;padding:1.5rem}
+.room-video-info h2{font-size:1.5rem;margin-bottom:0.5rem}
+.room-video-info p{color:var(--text-dim)}
+.room-controls{display:flex;gap:1rem}
+.room-sidebar{display:flex;flex-direction:column;gap:1.5rem;height:100%}
+.participants-section,.chat-section{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;padding:1.5rem;display:flex;flex-direction:column}
+.participants-section{flex:0 0 auto;max-height:250px}
+.chat-section{flex:1;min-height:0}
+.participants-section h3,.chat-section h3{font-size:1.1rem;margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem}
+.participants-list{overflow-y:auto;flex:1}
+.participant-item{display:flex;align-items:center;gap:0.75rem;padding:0.75rem;border-radius:12px;margin-bottom:0.5rem;transition:background 0.2s}
+.participant-item:hover{background:rgba(255,255,255,0.05)}
+.participant-item.host{background:rgba(102,126,234,0.1)}
+.participant-avatar{width:36px;height:36px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;color:white;flex-shrink:0}
+.participant-info{flex:1;display:flex;flex-direction:column;gap:0.15rem}
+.participant-name{font-weight:500}
+.host-badge{font-size:0.75rem;color:#667eea;font-weight:600}
+.btn-kick{background:rgba(245,87,108,0.1);border:1px solid rgba(245,87,108,0.3);color:#f5576c;padding:0.5rem;border-radius:8px;cursor:pointer;transition:all 0.2s}
+.btn-kick:hover{background:rgba(245,87,108,0.2)}
+.chat-messages{flex:1;overflow-y:auto;margin-bottom:1rem;display:flex;flex-direction:column;gap:0.75rem}
+.chat-welcome{text-align:center;padding:2rem;color:var(--text-dim)}
+.chat-welcome i{font-size:3rem;margin-bottom:1rem;opacity:0.5;display:block}
+.chat-welcome small{display:block;margin-top:0.5rem;font-size:0.8rem}
+.chat-message{background:rgba(255,255,255,0.05);padding:0.75rem;border-radius:12px}
+.chat-message.system-message{background:rgba(102,126,234,0.1);border:1px solid rgba(102,126,234,0.2);padding:0.5rem}
+.message-header{display:flex;justify-content:space-between;margin-bottom:0.5rem}
+.message-author{font-weight:600;color:#667eea}
+.message-time{font-size:0.75rem;color:var(--text-dim)}
+.message-text{color:var(--text);word-wrap:break-word}
+.chat-input-container{display:flex;gap:0.75rem}
+.chat-input-container input{flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);padding:0.75rem 1rem;border-radius:12px;outline:none;transition:all 0.3s}
+.chat-input-container input:focus{background:rgba(255,255,255,0.1);border-color:rgba(102,126,234,0.5)}
+.chat-input-container button{padding:0.75rem 1.25rem}
+.invite-link-section{margin-top:1rem}
+.invite-link-section label{display:block;margin-bottom:0.5rem;font-weight:500}
+.invite-link-box{display:flex;gap:0.75rem}
+.invite-link-box input{flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);padding:0.75rem 1rem;border-radius:12px}
+@media(max-width:1200px){.room-container{grid-template-columns:1fr;height:auto}.room-sidebar{height:600px}}
+</style>
+{% endblock %}

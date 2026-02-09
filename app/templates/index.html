@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="zt-main-layout">
+    <aside class="zt-sidebar" id="ztSidebar">
+        <div class="zt-sidebar-section">
+            <a href="/" class="zt-sidebar-item active">
+                <i class="fas fa-home"></i><span>Главная</span>
+            </a>
+            <a href="#" class="zt-sidebar-item" onclick="scrollToSection('recommendedSection')">
+                <i class="fas fa-fire"></i><span>Рекомендации</span>
+            </a>
+            <a href="#" class="zt-sidebar-item" onclick="scrollToSection('newSection')">
+                <i class="fas fa-clock"></i><span>Новое</span>
+            </a>
+            <a href="#" class="zt-sidebar-item" onclick="scrollToSection('popularSection')">
+                <i class="fas fa-chart-line"></i><span>Популярное</span>
+            </a>
+            <a href="/rooms" class="zt-sidebar-item">
+                <i class="fas fa-users"></i><span>Комнаты</span>
+            </a>
+        </div>
+        <div class="zt-sidebar-divider"></div>
+        <div class="zt-sidebar-section">
+            <div class="zt-sidebar-label">Категории</div>
+            <a href="#" class="zt-sidebar-item zt-cat-item active" data-cat="all" onclick="filterCategory('all', this)">
+                <i class="fas fa-globe"></i><span>Все</span>
+            </a>
+            <a href="#" class="zt-sidebar-item zt-cat-item" data-cat="gaming" onclick="filterCategory('gaming', this)">
+                <i class="fas fa-gamepad"></i><span>Игры</span>
+            </a>
+            <a href="#" class="zt-sidebar-item zt-cat-item" data-cat="music" onclick="filterCategory('music', this)">
+                <i class="fas fa-music"></i><span>Музыка</span>
+            </a>
+            <a href="#" class="zt-sidebar-item zt-cat-item" data-cat="education" onclick="filterCategory('education', this)">
+                <i class="fas fa-graduation-cap"></i><span>Образование</span>
+            </a>
+            <a href="#" class="zt-sidebar-item zt-cat-item" data-cat="entertainment" onclick="filterCategory('entertainment', this)">
+                <i class="fas fa-laugh"></i><span>Развлечения</span>
+            </a>
+            <a href="#" class="zt-sidebar-item zt-cat-item" data-cat="tech" onclick="filterCategory('tech', this)">
+                <i class="fas fa-microchip"></i><span>Технологии</span>
+            </a>
+            <a href="#" class="zt-sidebar-item zt-cat-item" data-cat="sports" onclick="filterCategory('sports', this)">
+                <i class="fas fa-futbol"></i><span>Спорт</span>
+            </a>
+        </div>
+        <div class="zt-sidebar-divider"></div>
+        <div class="zt-sidebar-section" id="sidebarSubs" style="display:none;">
+            <div class="zt-sidebar-label">Подписки</div>
+            <div id="sidebarSubsList"></div>
+        </div>
+    </aside>
+
+    <div class="zt-feed">
+        <div class="zt-category-chips" id="categoryChips">
+            <button class="zt-chip active" data-cat="all" onclick="filterCategory('all', this)">Все</button>
+            <button class="zt-chip" data-cat="gaming" onclick="filterCategory('gaming', this)">Игры</button>
+            <button class="zt-chip" data-cat="music" onclick="filterCategory('music', this)">Музыка</button>
+            <button class="zt-chip" data-cat="education" onclick="filterCategory('education', this)">Образование</button>
+            <button class="zt-chip" data-cat="entertainment" onclick="filterCategory('entertainment', this)">Развлечения</button>
+            <button class="zt-chip" data-cat="tech" onclick="filterCategory('tech', this)">Технологии</button>
+            <button class="zt-chip" data-cat="sports" onclick="filterCategory('sports', this)">Спорт</button>
+        </div>
+
+        <section class="zt-section" id="recommendedSection">
+            <div class="zt-section-header">
+                <h2><i class="fas fa-fire"></i> Рекомендации</h2>
+            </div>
+            <div class="video-grid" id="recommendedGrid">
+                <div class="zt-skeleton-row"></div>
+            </div>
+        </section>
+
+        <section class="zt-section" id="newSection">
+            <div class="zt-section-header">
+                <h2><i class="fas fa-clock"></i> Новое</h2>
+            </div>
+            <div class="video-grid" id="newGrid">
+                <div class="zt-skeleton-row"></div>
+            </div>
+        </section>
+
+        <section class="zt-section" id="popularSection">
+            <div class="zt-section-header">
+                <h2><i class="fas fa-chart-line"></i> Популярное</h2>
+            </div>
+            <div class="video-grid" id="popularGrid">
+                <div class="zt-skeleton-row"></div>
+            </div>
+        </section>
+
+        <div id="emptyFeed" style="display:none;">
+            <div class="empty-state">
+                <i class="fas fa-video"></i>
+                <h3>Пока нет видео</h3>
+                <p>Станьте первым, кто загрузит видео на платформу!</p>
+                <button class="btn btn-primary" onclick="checkAuthAndUpload()"><i class="fas fa-upload"></i> Загрузить видео</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allFeedData = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadFeed();
+    loadSidebarSubs();
+});
+
+async function loadFeed() {
+    try {
+        const catParam = currentCategory && currentCategory !== 'all' ? '?category=' + currentCategory : '';
+        const resp = await fetch('/api/videos/feed' + catParam);
+        if (!resp.ok) { showEmptyFeed(); return; }
+        allFeedData = await resp.json();
+        if (allFeedData.total === 0) { showEmptyFeed(); return; }
+        document.getElementById('recommendedSection').style.display = 'block';
+        document.getElementById('newSection').style.display = 'block';
+        document.getElementById('popularSection').style.display = 'block';
+        document.getElementById('emptyFeed').style.display = 'none';
+        renderSection('recommendedGrid', allFeedData.recommended);
+        renderSection('newGrid', allFeedData.new);
+        renderSection('popularGrid', allFeedData.popular);
+    } catch (e) { showEmptyFeed(); }
+}
+
+function renderSection(gridId, videos) {
+    const grid = document.getElementById(gridId);
+    if (!videos || videos.length === 0) {
+        grid.innerHTML = '<div class="zt-section-empty">Нет видео в этой категории</div>';
+        return;
+    }
+    grid.innerHTML = videos.map(v => renderVideoCard(v)).join('');
+}
+
+function renderVideoCard(v) {
+    const dur = formatDuration(v.duration);
+    const date = timeAgo(v.created_at);
+    const cats = {gaming:'Игры',music:'Музыка',education:'Образование',entertainment:'Развлечения',tech:'Технологии',sports:'Спорт',news:'Новости',blog:'Блог',other:'Другое'};
+    return `
+    <div class="video-card" onclick="window.location.href='/video/${v.id}'">
+        <div class="video-thumbnail">
+            ${v.thumbnail_url ? `<img src="${v.thumbnail_url}" alt="">` : `<i class="fas fa-play-circle" style="color:rgba(255,255,255,0.3);font-size:3rem;"></i>`}
+            <div class="play-overlay"><i class="fas fa-play" style="color:white;font-size:1.5rem;margin-left:4px;"></i></div>
+            <span class="duration-badge">${dur}</span>
+            ${v.access_level !== 'public' ? `<span class="video-badge">${v.access_level === 'sponsor' ? '💎' : '🔒'}</span>` : ''}
+        </div>
+        <div class="video-info">
+            <h3 class="video-title">${escapeHtml(v.title)}</h3>
+            ${v.channel ? `<p class="video-channel" onclick="event.stopPropagation();window.location.href='/channel/${v.channel.id}'">
+                <i class="fas fa-user-circle" style="font-size:1.2rem;"></i>
+                ${escapeHtml(v.channel.name)}
+            </p>` : ''}
+            <div class="video-meta">
+                <span>${v.views_count || 0} <i class="fas fa-eye"></i></span>
+                <span>${v.likes_count || 0} <i class="fas fa-thumbs-up"></i></span>
+                <span>${date}</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+function timeAgo(dateStr) {
+    const now = new Date();
+    const d = new Date(dateStr);
+    const diff = Math.floor((now - d) / 1000);
+    if (diff < 60) return 'только что';
+    if (diff < 3600) return Math.floor(diff / 60) + ' мин. назад';
+    if (diff < 86400) return Math.floor(diff / 3600) + ' ч. назад';
+    if (diff < 2592000) return Math.floor(diff / 86400) + ' дн. назад';
+    return d.toLocaleDateString('ru-RU');
+}
+
+function formatDuration(s) {
+    if (!s) return '0:00';
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    return `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+let currentCategory = 'all';
+
+function filterCategory(cat, el) {
+    currentCategory = cat;
+    document.querySelectorAll('.zt-chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.zt-cat-item').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll(`[data-cat="${cat}"]`).forEach(c => c.classList.add('active'));
+    loadFeed();
+}
+
+function scrollToSection(id) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function showEmptyFeed() {
+    document.getElementById('recommendedSection').style.display = 'none';
+    document.getElementById('newSection').style.display = 'none';
+    document.getElementById('popularSection').style.display = 'none';
+    document.getElementById('emptyFeed').style.display = 'block';
+}
+
+async function loadSidebarSubs() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+        const resp = await fetch('/api/subscriptions/my', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!resp.ok) return;
+        const subs = await resp.json();
+        if (subs.length === 0) return;
+        document.getElementById('sidebarSubs').style.display = 'block';
+        const list = document.getElementById('sidebarSubsList');
+        const channelPromises = subs.map(s => fetch(`/api/channels/${s.channel_id}`).then(r => r.ok ? r.json() : null));
+        const channels = await Promise.all(channelPromises);
+        list.innerHTML = channels.filter(Boolean).map(ch => `
+            <a href="/channel/${ch.id}" class="zt-sidebar-item">
+                <i class="fas fa-tv"></i><span>${escapeHtml(ch.name)}</span>
+            </a>
+        `).join('');
+    } catch (e) {}
+}
+
+function checkAuthAndUpload() {
+    if (localStorage.getItem('token')) showUploadModal();
+    else showLoginModal();
+}
+</script>
+{% endblock %}

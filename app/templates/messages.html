@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Сообщения — ZTUBE{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="messages-layout">
+        <div class="conversations-panel">
+            <div class="conversations-header">
+                <h2><i class="fas fa-envelope"></i> Сообщения</h2>
+            </div>
+            <div id="conversationsList" class="conversations-list">
+                <div class="loading-small">Загрузка...</div>
+            </div>
+        </div>
+        <div class="chat-panel" id="chatPanel">
+            <div class="chat-panel-empty">
+                <i class="fas fa-comments"></i>
+                <p>Выберите диалог</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPartnerId = null;
+let currentUser = null;
+let pollInterval = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const token = localStorage.getItem('token');
+    if (!token) { window.location.href = '/'; return; }
+    const r = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!r.ok) { window.location.href = '/'; return; }
+    currentUser = await r.json();
+    loadConversations();
+    const params = new URLSearchParams(window.location.search);
+    const toId = params.get('to');
+    if (toId) openChat(parseInt(toId));
+});
+
+async function loadConversations() {
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/messages/conversations', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!r.ok) return;
+        const convs = await r.json();
+        const list = document.getElementById('conversationsList');
+        if (convs.length === 0) { list.innerHTML = '<div class="conv-empty">Нет диалогов</div>'; return; }
+        list.innerHTML = convs.map(c => `
+            <div class="conv-item ${c.user_id === currentPartnerId ? 'active' : ''} ${c.unread > 0 ? 'has-unread' : ''}" onclick="openChat(${c.user_id})">
+                <div class="conv-avatar"><i class="fas fa-user-circle"></i></div>
+                <div class="conv-info">
+                    <div class="conv-name">${escapeHtml(c.display_name)} <small style="color:var(--text-dim)">${escapeHtml(c.tag)}</small></div>
+                    <div class="conv-preview">${escapeHtml(c.last_message)}</div>
+                </div>
+                ${c.unread > 0 ? `<span class="conv-unread">${c.unread}</span>` : ''}
+            </div>
+        `).join('');
+    } catch (e) {}
+}
+
+async function openChat(partnerId) {
+    currentPartnerId = partnerId;
+    if (pollInterval) clearInterval(pollInterval);
+    const token = localStorage.getItem('token');
+    const panel = document.getElementById('chatPanel');
+    panel.innerHTML = '<div class="chat-loading">Загрузка...</div>';
+    try {
+        let partnerName = `User #${partnerId}`;
+        try {
+            const ur = await fetch(`/api/auth/users/${partnerId}`);
+            if (ur.ok) { const u = await ur.json(); partnerName = u.display_name; }
+        } catch (e) {}
+        const r = await fetch(`/api/messages/with/${partnerId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!r.ok) return;
+        const msgs = await r.json();
+        panel.innerHTML = `
+            <div class="dm-header">
+                <h3 onclick="window.location.href='/profile/${partnerId}'" style="cursor:pointer">${escapeHtml(partnerName)}</h3>
+            </div>
+            <div class="dm-messages" id="dmMessages"></div>
+            <div class="dm-input-container">
+                <input type="text" id="dmInput" placeholder="Сообщение..." onkeypress="if(event.key==='Enter')sendDM()">
+                <button class="btn btn-primary" onclick="sendDM()"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        `;
+        renderMessages(msgs);
+        pollInterval = setInterval(() => refreshMessages(partnerId), 3000);
+        loadConversations();
+    } catch (e) {}
+}
+
+function renderMessages(msgs) {
+    const container = document.getElementById('dmMessages');
+    if (!container) return;
+    container.innerHTML = msgs.map(m => `
+        <div class="dm-msg ${m.sender_id === currentUser.id ? 'dm-sent' : 'dm-received'}">
+            <div class="dm-msg-content">${escapeHtml(m.content)}</div>
+            <div class="dm-msg-time">${new Date(m.created_at).toLocaleString('ru-RU', {hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'})}</div>
+        </div>
+    `).join('');
+    container.scrollTop = container.scrollHeight;
+}
+
+async function refreshMessages(partnerId) {
+    if (partnerId !== currentPartnerId) return;
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch(`/api/messages/with/${partnerId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (r.ok) renderMessages(await r.json());
+    } catch (e) {}
+}
+
+async function sendDM() {
+    const input = document.getElementById('dmInput');
+    const content = input.value.trim();
+    if (!content || !currentPartnerId) return;
+    const token = localStorage.getItem('token');
+    input.value = '';
+    try {
+        const r = await fetch('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ recipient_id: currentPartnerId, content })
+        });
+        if (r.ok) { refreshMessages(currentPartnerId); loadConversations(); }
+        else { const d = await r.json(); showNotification(d.error.message, 'error'); }
+    } catch (e) {}
+}
+
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+</script>
+
+<style>
+.messages-layout{display:grid;grid-template-columns:350px 1fr;gap:0;height:calc(100vh - 120px);background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:20px;overflow:hidden;margin:2rem 0}
+.conversations-panel{border-right:1px solid var(--border);display:flex;flex-direction:column}
+.conversations-header{padding:1.5rem;border-bottom:1px solid var(--border)}
+.conversations-header h2{font-size:1.3rem;display:flex;align-items:center;gap:0.5rem}
+.conversations-list{flex:1;overflow-y:auto}
+.conv-item{display:flex;align-items:center;gap:1rem;padding:1rem 1.5rem;cursor:pointer;transition:background 0.2s;border-bottom:1px solid rgba(255,255,255,0.03)}
+.conv-item:hover,.conv-item.active{background:rgba(255,255,255,0.05)}
+.conv-item.active{border-left:3px solid #667eea}
+.conv-avatar{width:44px;height:44px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;color:white;font-size:1.4rem;flex-shrink:0}
+.conv-info{flex:1;min-width:0}
+.conv-name{font-weight:600;font-size:0.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-preview{font-size:0.85rem;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-unread{background:var(--primary);color:white;font-size:0.75rem;font-weight:700;padding:0.2rem 0.5rem;border-radius:50px;min-width:22px;text-align:center}
+.conv-empty{padding:2rem;text-align:center;color:var(--text-dim)}
+.chat-panel{display:flex;flex-direction:column}
+.chat-panel-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-dim)}
+.chat-panel-empty i{font-size:4rem;margin-bottom:1rem;opacity:0.3}
+.dm-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--border)}
+.dm-header h3{font-size:1.1rem;font-weight:600}
+.dm-messages{flex:1;overflow-y:auto;padding:1.5rem;display:flex;flex-direction:column;gap:0.75rem}
+.dm-msg{max-width:70%;padding:0.75rem 1rem;border-radius:16px;position:relative}
+.dm-sent{align-self:flex-end;background:rgba(102,126,234,0.2);border:1px solid rgba(102,126,234,0.3)}
+.dm-received{align-self:flex-start;background:rgba(255,255,255,0.05);border:1px solid var(--border)}
+.dm-msg-content{word-wrap:break-word;line-height:1.5}
+.dm-msg-time{font-size:0.7rem;color:var(--text-dim);margin-top:0.35rem}
+.dm-input-container{display:flex;gap:0.75rem;padding:1rem 1.5rem;border-top:1px solid var(--border)}
+.dm-input-container input{flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);padding:0.75rem 1rem;border-radius:12px;outline:none}
+.dm-input-container input:focus{border-color:rgba(102,126,234,0.5)}
+.chat-loading{padding:2rem;text-align:center;color:var(--text-dim)}
+@media(max-width:768px){.messages-layout{grid-template-columns:1fr;height:auto}.conversations-panel{max-height:300px}}
+</style>
+{% endblock %}

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Админ-панель — ZTUBE{% endblock %}
+{% block content %}
+<div class="container">
+    <section class="admin-header">
+        <h1 class="page-title"><i class="fas fa-shield-alt"></i> Админ-панель</h1>
+    </section>
+    <section class="admin-stats" id="adminStats"></section>
+    <section class="admin-tabs">
+        <button class="tab-btn active" onclick="switchTab('users', this)">Пользователи</button>
+        <button class="tab-btn" onclick="switchTab('reports', this)">Жалобы</button>
+    </section>
+    <section class="admin-content" id="adminContent"></section>
+</div>
+
+<script>
+let adminToken = null;
+document.addEventListener('DOMContentLoaded', async () => {
+    adminToken = localStorage.getItem('token');
+    if (!adminToken) { window.location.href = '/'; return; }
+    const r = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${adminToken}` } });
+    if (!r.ok) { window.location.href = '/'; return; }
+    const u = await r.json();
+    if (!u.is_admin) { window.location.href = '/'; return; }
+    loadStats();
+    loadUsers();
+});
+
+async function loadStats() {
+    try {
+        const r = await fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${adminToken}` } });
+        if (!r.ok) return;
+        const s = await r.json();
+        document.getElementById('adminStats').innerHTML = `
+            <div class="stats-grid">
+                <div class="stat-card"><i class="fas fa-users"></i><span class="stat-num">${s.users}</span><span>Пользователи</span></div>
+                <div class="stat-card"><i class="fas fa-video"></i><span class="stat-num">${s.videos}</span><span>Видео</span></div>
+                <div class="stat-card"><i class="fas fa-door-open"></i><span class="stat-num">${s.rooms}</span><span>Комнаты</span></div>
+                <div class="stat-card"><i class="fas fa-flag"></i><span class="stat-num">${s.reports}</span><span>Жалобы</span></div>
+            </div>`;
+    } catch (e) {}
+}
+
+function switchTab(tab, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (tab === 'users') loadUsers();
+    else loadReports();
+}
+
+async function loadUsers() {
+    try {
+        const r = await fetch('/api/admin/users', { headers: { 'Authorization': `Bearer ${adminToken}` } });
+        if (!r.ok) return;
+        const users = await r.json();
+        document.getElementById('adminContent').innerHTML = `<div class="admin-table">${users.map(u => `
+            <div class="admin-row">
+                <div class="admin-cell"><span class="admin-user-name">${esc(u.display_name)}</span><small>${esc(u.tag)}</small></div>
+                <div class="admin-cell"><small>${u.email}</small></div>
+                <div class="admin-cell">${u.is_admin ? '<span class="badge badge-admin">Admin</span>' : ''}${u.is_vip ? '<span class="badge badge-vip">VIP</span>' : ''}</div>
+                <div class="admin-cell">${u.mexels} M</div>
+                <div class="admin-cell admin-actions">
+                    <button class="btn-sm-action" onclick="toggleVip(${u.id}, ${!u.is_vip})">${u.is_vip ? 'Убрать VIP' : 'Дать VIP'}</button>
+                    ${!u.is_admin ? `<button class="btn-sm-action btn-danger" onclick="deleteUser(${u.id})">Удалить</button>` : ''}
+                </div>
+            </div>
+        `).join('')}</div>`;
+    } catch (e) {}
+}
+
+async function loadReports() {
+    try {
+        const r = await fetch('/api/admin/reports', { headers: { 'Authorization': `Bearer ${adminToken}` } });
+        if (!r.ok) return;
+        const reports = await r.json();
+        if (reports.length === 0) { document.getElementById('adminContent').innerHTML = '<p style="padding:2rem;color:var(--text-dim)">Нет жалоб</p>'; return; }
+        document.getElementById('adminContent').innerHTML = `<div class="admin-table">${reports.map(r => `
+            <div class="admin-row">
+                <div class="admin-cell">Видео #${r.video_id}</div>
+                <div class="admin-cell">${esc(r.reason)}</div>
+                <div class="admin-cell"><span class="badge badge-${r.status}">${r.status}</span></div>
+                <div class="admin-cell admin-actions">
+                    ${r.status === 'pending' ? `
+                        <button class="btn-sm-action" onclick="resolveReport(${r.id}, 'resolved')">Решено</button>
+                        <button class="btn-sm-action btn-danger" onclick="resolveReport(${r.id}, 'dismissed')">Отклонить</button>
+                        <button class="btn-sm-action btn-danger" onclick="adminDeleteVideo(${r.video_id})">Удалить видео</button>
+                    ` : ''}
+                </div>
+            </div>
+        `).join('')}</div>`;
+    } catch (e) {}
+}
+
+async function toggleVip(uid, val) {
+    await fetch(`/api/admin/users/${uid}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }, body: JSON.stringify({ is_vip: val }) });
+    loadUsers(); loadStats();
+}
+
+async function deleteUser(uid) {
+    if (!confirm('Удалить пользователя?')) return;
+    await fetch(`/api/admin/users/${uid}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${adminToken}` } });
+    loadUsers(); loadStats();
+}
+
+async function resolveReport(rid, status) {
+    await fetch(`/api/admin/reports/${rid}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }, body: JSON.stringify({ status }) });
+    loadReports(); loadStats();
+}
+
+async function adminDeleteVideo(vid) {
+    if (!confirm('Удалить видео?')) return;
+    await fetch(`/api/admin/videos/${vid}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${adminToken}` } });
+    showNotification('Видео удалено', 'success'); loadReports(); loadStats();
+}
+
+function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+</script>
+
+<style>
+.admin-header{padding:2rem 0}
+.admin-stats{margin-bottom:2rem}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1.5rem}
+.stat-card{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;padding:1.5rem;text-align:center;display:flex;flex-direction:column;align-items:center;gap:0.5rem}
+.stat-card i{font-size:2rem;background:var(--primary);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat-num{font-size:2rem;font-weight:800}
+.admin-tabs{display:flex;gap:0.5rem;margin-bottom:1.5rem}
+.tab-btn{padding:0.75rem 1.5rem;border:1px solid var(--border);background:var(--glass);color:var(--text);border-radius:50px;cursor:pointer;font-weight:600;transition:all 0.2s}
+.tab-btn.active{background:rgba(102,126,234,0.2);border-color:rgba(102,126,234,0.5)}
+.admin-table{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.admin-row{display:flex;align-items:center;padding:1rem 1.5rem;border-bottom:1px solid rgba(255,255,255,0.03);gap:1rem}
+.admin-row:last-child{border-bottom:none}
+.admin-cell{flex:1;min-width:0}
+.admin-cell small{color:var(--text-dim);display:block}
+.admin-user-name{font-weight:600}
+.admin-actions{display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:flex-end}
+.btn-sm-action{padding:0.35rem 0.75rem;border:1px solid var(--border);background:var(--glass);color:var(--text);border-radius:8px;cursor:pointer;font-size:0.8rem;transition:all 0.2s}
+.btn-sm-action:hover{background:rgba(255,255,255,0.1)}
+.btn-danger{border-color:rgba(245,87,108,0.3);color:#f5576c}
+.btn-danger:hover{background:rgba(245,87,108,0.1)}
+.badge-admin{background:rgba(245,87,108,0.15);color:#f5576c;border:1px solid rgba(245,87,108,0.3)}
+.badge-pending{background:rgba(255,193,7,0.15);color:#ffc107}
+.badge-resolved{background:rgba(76,175,80,0.15);color:#4caf50}
+.badge-dismissed{background:rgba(158,158,158,0.15);color:#9e9e9e}
+</style>
+{% endblock %}

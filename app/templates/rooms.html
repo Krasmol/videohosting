@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Комнаты — ZTUBE{% endblock %}
+{% block content %}
+<div class="container">
+    <section class="rooms-header">
+        <div class="rooms-header-content">
+            <h1 class="page-title">Комнаты совместного просмотра</h1>
+            <p class="page-subtitle">Смотрите видео вместе с друзьями</p>
+        </div>
+        <button class="btn btn-primary" onclick="showCreateRoomModal()">
+            <i class="fas fa-plus"></i> Создать комнату
+        </button>
+    </section>
+    <section class="rooms-section">
+        <div id="roomsGrid" class="rooms-grid">
+            <div class="skeleton-card"><div class="skeleton-thumbnail"></div>
+            <div class="skeleton-info"><div class="skeleton-line"></div>
+            <div class="skeleton-line short"></div></div></div>
+        </div>
+    </section>
+</div>
+
+<div id="createRoomModal" class="modal">
+    <div class="modal-content" style="max-width:700px;">
+        <span class="close" onclick="closeModal('createRoomModal')">&times;</span>
+        <h2><i class="fas fa-plus-circle"></i> Создать комнату</h2>
+        <form id="createRoomForm" onsubmit="createRoom(event)">
+            <div class="form-group">
+                <label>Название комнаты</label>
+                <input type="text" name="room_name" maxlength="100" placeholder="Необязательно">
+            </div>
+            <div class="form-group">
+                <label>Выберите видео</label>
+                <input type="hidden" name="video_id" id="videoIdHidden" required>
+                <div id="selectedVideoCard" style="display:none;"></div>
+                <button type="button" class="btn btn-outline btn-block" onclick="openVideoPickerModal()" id="pickVideoBtn" style="margin-top:0.5rem;">
+                    <i class="fas fa-film"></i> Выбрать видео
+                </button>
+            </div>
+            <div class="form-group">
+                <label>Максимум участников</label>
+                <select name="max_participants">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+            <div id="createRoomError" class="error-message"></div>
+            <button type="submit" class="btn btn-primary btn-block">Создать</button>
+        </form>
+    </div>
+</div>
+
+<div id="videoPickerModal" class="modal">
+    <div class="modal-content" style="max-width:900px;max-height:85vh;display:flex;flex-direction:column;">
+        <span class="close" onclick="closeModal('videoPickerModal')">&times;</span>
+        <h2><i class="fas fa-film"></i> Выберите видео</h2>
+        <div style="display:flex;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+            <input type="text" id="vpSearch" placeholder="Поиск по названию..." oninput="filterPickerVideos()" style="flex:1;min-width:200px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);padding:0.75rem 1rem;border-radius:12px;outline:none;">
+            <select id="vpCategory" onchange="filterPickerVideos()" style="background:#1a1f3a;border:1px solid var(--border);color:var(--text);padding:0.75rem 1rem;border-radius:12px;">
+                <option value="all" style="background:#1a1f3a;color:#fff;">Все категории</option>
+                <option value="gaming" style="background:#1a1f3a;color:#fff;">Игры</option>
+                <option value="music" style="background:#1a1f3a;color:#fff;">Музыка</option>
+                <option value="education" style="background:#1a1f3a;color:#fff;">Образование</option>
+                <option value="entertainment" style="background:#1a1f3a;color:#fff;">Развлечения</option>
+                <option value="tech" style="background:#1a1f3a;color:#fff;">Технологии</option>
+                <option value="sports" style="background:#1a1f3a;color:#fff;">Спорт</option>
+                <option value="news" style="background:#1a1f3a;color:#fff;">Новости</option>
+                <option value="blog" style="background:#1a1f3a;color:#fff;">Блог</option>
+            </select>
+        </div>
+        <div id="vpGrid" style="overflow-y:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;padding-right:0.5rem;"></div>
+    </div>
+</div>
+
+<script>
+let currentUser = null;
+let allPickerVideos = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            const r = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+            if (r.ok) currentUser = await r.json();
+        } catch (e) {}
+    }
+    loadRooms();
+});
+
+async function loadPickerVideos() {
+    try {
+        const resp = await fetch('/api/videos/search?limit=50');
+        if (!resp.ok) return;
+        allPickerVideos = await resp.json();
+        renderPickerGrid(allPickerVideos);
+    } catch (e) {}
+}
+
+function filterPickerVideos() {
+    const q = document.getElementById('vpSearch').value.toLowerCase().trim();
+    const cat = document.getElementById('vpCategory').value;
+    let filtered = allPickerVideos;
+    if (q) filtered = filtered.filter(v => v.title.toLowerCase().includes(q));
+    if (cat !== 'all') filtered = filtered.filter(v => v.category === cat);
+    renderPickerGrid(filtered);
+}
+
+function renderPickerGrid(videos) {
+    const grid = document.getElementById('vpGrid');
+    if (videos.length === 0) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--text-dim);">Нет видео</div>'; return; }
+    const cats = {gaming:'Игры',music:'Музыка',education:'Образование',entertainment:'Развлечения',tech:'Технологии',sports:'Спорт',news:'Новости',blog:'Блог',other:'Другое'};
+    grid.innerHTML = videos.map(v => {
+        const dur = formatDuration(v.duration);
+        return '<div class="vp-card" onclick="pickVideo(' + v.id + ',\'' + escapeHtml(v.title).replace(/'/g,"\\'") + '\',\'' + (v.thumbnail_url || '') + '\')" style="cursor:pointer;background:rgba(20,25,45,0.6);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;transition:all 0.2s;">' +
+            '<div style="aspect-ratio:16/9;background:linear-gradient(135deg,#1a1f3a,#2d1b4e);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;">' +
+            (v.thumbnail_url ? '<img src="' + v.thumbnail_url + '" style="width:100%;height:100%;object-fit:cover;">' : '<i class="fas fa-play-circle" style="color:rgba(255,255,255,0.3);font-size:2rem;"></i>') +
+            '<span style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.85);padding:2px 6px;border-radius:4px;font-size:0.7rem;font-weight:600;">' + dur + '</span>' +
+            '</div>' +
+            '<div style="padding:0.6rem;">' +
+            '<div style="font-size:0.85rem;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;margin-bottom:0.25rem;">' + escapeHtml(v.title) + '</div>' +
+            '<div style="font-size:0.75rem;color:var(--text-dim);display:flex;gap:0.5rem;">' +
+            '<span>' + (v.views_count || 0) + ' <i class="fas fa-eye"></i></span>' +
+            '<span>' + (cats[v.category] || '') + '</span>' +
+            '</div></div></div>';
+    }).join('');
+}
+
+function pickVideo(id, title, thumbUrl) {
+    document.getElementById('videoIdHidden').value = id;
+    document.getElementById('pickVideoBtn').style.display = 'none';
+    const card = document.getElementById('selectedVideoCard');
+    card.style.display = 'flex';
+    card.innerHTML = '<div style="display:flex;align-items:center;gap:1rem;padding:0.75rem;background:rgba(76,175,80,0.1);border:1px solid rgba(76,175,80,0.3);border-radius:12px;width:100%;">' +
+        '<div style="width:80px;height:45px;border-radius:8px;overflow:hidden;background:#1a1f3a;flex-shrink:0;display:flex;align-items:center;justify-content:center;">' +
+        (thumbUrl ? '<img src="' + thumbUrl + '" style="width:100%;height:100%;object-fit:cover;">' : '<i class="fas fa-play" style="color:rgba(255,255,255,0.3);"></i>') +
+        '</div>' +
+        '<div style="flex:1;min-width:0;"><div style="font-weight:500;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(title) + '</div><div style="font-size:0.75rem;color:#4caf50;"><i class="fas fa-check-circle"></i> Выбрано</div></div>' +
+        '<button type="button" onclick="clearVideoSelection(event)" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1.2rem;padding:0.5rem;"><i class="fas fa-times"></i></button>' +
+        '</div>';
+    closeModal('videoPickerModal');
+}
+
+function clearVideoSelection(e) {
+    e.stopPropagation();
+    document.getElementById('videoIdHidden').value = '';
+    document.getElementById('selectedVideoCard').style.display = 'none';
+    document.getElementById('pickVideoBtn').style.display = 'block';
+}
+
+function openVideoPickerModal() {
+    showModal('videoPickerModal');
+    if (allPickerVideos.length === 0) loadPickerVideos();
+}
+
+async function loadRooms() {
+    try {
+        const r = await fetch('/api/rooms');
+        if (!r.ok) { showEmptyState(); return; }
+        const rooms = await r.json();
+        displayRooms(rooms);
+    } catch (e) { showEmptyState(); }
+}
+
+function displayRooms(rooms) {
+    const grid = document.getElementById('roomsGrid');
+    if (rooms.length === 0) { showEmptyState(); return; }
+    Promise.all(rooms.map(async room => {
+        try { const vr = await fetch('/api/videos/' + room.video_id); if (vr.ok) room.video = await vr.json(); } catch (e) {}
+        return room;
+    })).then(rs => {
+        grid.innerHTML = rs.map(room => {
+            const title = room.name || (room.video ? escapeHtml(room.video.title) : 'Видео #' + room.video_id);
+            const isFull = room.max_participants && room.current_participants >= room.max_participants;
+            const isOwner = currentUser && currentUser.id === room.owner_id;
+            const thumbHtml = room.video && room.video.thumbnail_url
+                ? '<img src="' + room.video.thumbnail_url + '" style="width:100%;height:100%;object-fit:cover;">'
+                : '<i class="fas fa-play-circle" style="color:rgba(255,255,255,0.3);font-size:3rem;"></i>';
+            return '<div class="room-card ' + (isFull ? 'room-full' : '') + '">' +
+                '<div class="room-thumbnail" onclick="' + (isFull ? '' : 'joinRoom(' + room.id + ')') + '">' +
+                thumbHtml +
+                '<div class="room-live-badge"><i class="fas fa-circle"></i> LIVE</div>' +
+                '<div class="room-participants-badge"><i class="fas fa-users"></i> ' + room.current_participants + '/' + (room.max_participants || '∞') + '</div>' +
+                '</div>' +
+                '<div class="room-info">' +
+                '<h3 class="room-title">' + title + '</h3>' +
+                '<p class="room-host"><i class="fas fa-user-circle"></i> ' + (room.video ? escapeHtml(room.video.title) : '') + '</p>' +
+                '<div class="room-meta">' +
+                '<span style="color:' + (isFull ? '#f5576c' : '#4caf50') + '"><i class="fas fa-' + (isFull ? 'lock' : 'unlock') + '"></i> ' + (isFull ? 'Заполнена' : 'Открыта') + '</span>' +
+                (isOwner ? '<button class="btn-kick" onclick="event.stopPropagation();deleteRoom(' + room.id + ')" style="margin-left:auto;"><i class="fas fa-trash"></i></button>' : '') +
+                '</div></div></div>';
+        }).join('');
+    });
+}
+
+function showEmptyState() {
+    document.getElementById('roomsGrid').innerHTML = '<div class="empty-state"><i class="fas fa-users"></i><h3>Нет активных комнат</h3><p>Создайте первую!</p><button class="btn btn-primary" onclick="showCreateRoomModal()"><i class="fas fa-plus"></i> Создать</button></div>';
+}
+
+function showCreateRoomModal() {
+    if (!localStorage.getItem('token')) { showLoginModal(); return; }
+    showModal('createRoomModal');
+}
+
+async function createRoom(event) {
+    event.preventDefault();
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    const form = event.target;
+    const fd = new FormData(form);
+    const videoId = fd.get('video_id');
+    if (!videoId) {
+        const errDiv = document.getElementById('createRoomError');
+        errDiv.textContent = 'Выберите видео';
+        errDiv.classList.add('show');
+        return;
+    }
+    const data = { video_id: parseInt(videoId), max_participants: fd.get('max_participants') ? parseInt(fd.get('max_participants')) : null };
+    const roomName = fd.get('room_name');
+    if (roomName && roomName.trim()) data.name = roomName.trim();
+    const errDiv = document.getElementById('createRoomError');
+    errDiv.classList.remove('show');
+    try {
+        const r = await fetch('/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify(data) });
+        if (r.ok) { const room = await r.json(); closeModal('createRoomModal'); form.reset(); document.getElementById('selectedVideoCard').style.display = 'none'; document.getElementById('pickVideoBtn').style.display = 'block'; window.location.href = '/room/' + room.id; }
+        else { const d = await r.json(); errDiv.textContent = d.error.message; errDiv.classList.add('show'); }
+    } catch (e) { errDiv.textContent = 'Ошибка'; errDiv.classList.add('show'); }
+}
+
+async function joinRoom(roomId) {
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    try {
+        const r = await fetch('/api/rooms/' + roomId + '/join', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+        if (r.ok) window.location.href = '/room/' + roomId;
+        else { const d = await r.json(); showNotification(d.error.message, 'error'); }
+    } catch (e) { showNotification('Ошибка', 'error'); }
+}
+
+async function deleteRoom(roomId) {
+    if (!confirm('Удалить комнату?')) return;
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/rooms/' + roomId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+        if (r.ok) { showNotification('Удалена', 'success'); loadRooms(); }
+        else { const d = await r.json(); showNotification(d.error.message, 'error'); }
+    } catch (e) {}
+}
+
+function formatDuration(s) {
+    if (!s) return '0:00';
+    const m = Math.floor(s / 60), sec = s % 60;
+    return m + ':' + String(sec).padStart(2,'0');
+}
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+</script>
+
+<style>
+.rooms-header{display:flex;justify-content:space-between;align-items:center;padding:3rem 0 2rem;gap:2rem}
+.rooms-header-content{flex:1}
+.page-title{font-size:2.5rem;font-weight:800;margin-bottom:0.5rem;background:linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f5576c 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.page-subtitle{font-size:1.1rem;color:var(--text-dim)}
+.rooms-section{margin-top:2rem;padding-bottom:4rem}
+.rooms-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:2rem}
+.room-card{background:rgba(20,25,45,0.6);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);position:relative}
+.room-card:not(.room-full):hover{transform:translateY(-8px);box-shadow:0 16px 48px rgba(0,0,0,0.4),0 0 0 1px rgba(102,126,234,0.3);border-color:rgba(102,126,234,0.3)}
+.room-card.room-full{opacity:0.6;cursor:not-allowed}
+.room-thumbnail{aspect-ratio:16/9;background:linear-gradient(135deg,#1a1f3a 0%,#2d1b4e 100%);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;cursor:pointer}
+.room-live-badge{position:absolute;top:12px;left:12px;background:rgba(245,87,108,0.95);padding:6px 12px;border-radius:6px;font-size:0.75rem;font-weight:700;display:flex;align-items:center;gap:6px;animation:pulse 2s infinite}
+.room-live-badge i{font-size:0.5rem;animation:blink 1.5s infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.5}}
+.room-participants-badge{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.85);padding:6px 12px;border-radius:6px;font-size:0.8rem;font-weight:600;display:flex;align-items:center;gap:6px}
+.room-info{padding:1rem}
+.room-title{font-weight:600;font-size:0.95rem;margin-bottom:0.5rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;color:#fff}
+.room-host{color:rgba(255,255,255,0.6);font-size:0.85rem;margin:0.25rem 0;display:flex;align-items:center;gap:0.5rem}
+.room-meta{margin-top:0.75rem;font-size:0.8rem;display:flex;align-items:center;gap:0.5rem}
+.btn-kick{background:rgba(245,87,108,0.1);border:1px solid rgba(245,87,108,0.3);color:#f5576c;padding:0.5rem;border-radius:8px;cursor:pointer;transition:all 0.2s}
+.btn-kick:hover{background:rgba(245,87,108,0.2)}
+@media(max-width:768px){.rooms-header{flex-direction:column;align-items:flex-start}.rooms-header button{width:100%}.rooms-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Профиль — ZTUBE{% endblock %}
+{% block content %}
+<div class="container">
+    <section class="profile-header" id="profileHeader">
+        <div class="profile-avatar" id="profileAvatar"><i class="fas fa-user-circle"></i></div>
+        <div class="profile-info">
+            <h1 id="profileName">Загрузка...</h1>
+            <p class="profile-tag" id="profileTag"></p>
+            <p class="profile-bio" id="profileBio"></p>
+            <div class="profile-badges" id="profileBadges"></div>
+            <p class="profile-date" id="profileDate"></p>
+        </div>
+        <div class="profile-actions" id="profileActions"></div>
+    </section>
+    <section class="profile-edit-section" id="editSection" style="display:none;">
+        <h2 class="section-title">Настройки профиля</h2>
+        <form onsubmit="saveProfile(event)" class="profile-form">
+            <div class="form-group">
+                <label>Никнейм</label>
+                <input type="text" id="editDisplayName" maxlength="80" placeholder="Отображаемое имя">
+            </div>
+            <div class="form-group">
+                <label>О себе</label>
+                <textarea id="editBio" maxlength="500" rows="3" placeholder="Расскажите о себе..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Уведомления</label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="editNotifications" checked>
+                    <span>Получать уведомления</span>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+        </form>
+    </section>
+    <section class="profile-channel" id="channelSection" style="display:none;">
+        <h2 class="section-title">Канал</h2>
+        <div id="channelInfo"></div>
+    </section>
+</div>
+
+<script>
+const userId = {{ user_id }};
+let profileUser = null;
+let isOwnProfile = false;
+
+document.addEventListener('DOMContentLoaded', () => { loadProfile(); });
+
+async function loadProfile() {
+    try {
+        const r = await fetch(`/api/auth/users/${userId}`);
+        if (!r.ok) { document.querySelector('.container').innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><h3>Пользователь не найден</h3></div>'; return; }
+        profileUser = await r.json();
+        document.getElementById('profileName').textContent = profileUser.display_name;
+        document.getElementById('profileTag').textContent = profileUser.tag;
+        document.getElementById('profileBio').textContent = profileUser.bio || '';
+        document.getElementById('profileDate').innerHTML = `<i class="fas fa-calendar"></i> На платформе с ${new Date(profileUser.created_at).toLocaleDateString('ru-RU')}`;
+        let badges = '';
+        if (profileUser.is_vip) badges += '<span class="badge badge-vip"><i class="fas fa-crown"></i> VIP</span>';
+        if (profileUser.is_author) badges += '<span class="badge badge-author"><i class="fas fa-tv"></i> Автор</span>';
+        document.getElementById('profileBadges').innerHTML = badges;
+
+        const token = localStorage.getItem('token');
+        if (token) {
+            const meR = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (meR.ok) {
+                const me = await meR.json();
+                if (me.id === userId) {
+                    isOwnProfile = true;
+                    document.getElementById('editSection').style.display = 'block';
+                    document.getElementById('editDisplayName').value = me.display_name || '';
+                    document.getElementById('editBio').value = me.bio || '';
+                    document.getElementById('editNotifications').checked = me.notifications_enabled;
+                    document.getElementById('profileActions').innerHTML = `
+                        <div class="profile-stats-box">
+                            <div class="stat-item"><span class="stat-value">${me.mexels}</span><span class="stat-label">Мексели</span></div>
+                        </div>
+                        ${!me.is_vip ? '<button class="btn btn-primary" onclick="buyVip()"><i class="fas fa-crown"></i> Купить VIP (100 мекселей)</button>' : '<span class="badge badge-vip" style="font-size:1.2rem;padding:0.75rem 1.5rem;"><i class="fas fa-crown"></i> VIP</span>'}
+                    `;
+                } else {
+                    document.getElementById('profileActions').innerHTML = `<button class="btn btn-primary" onclick="window.location.href='/messages?to=${userId}'"><i class="fas fa-envelope"></i> Написать</button>`;
+                }
+            }
+        }
+    } catch (e) {}
+}
+
+async function saveProfile(event) {
+    event.preventDefault();
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+        const r = await fetch('/api/auth/me', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+                display_name: document.getElementById('editDisplayName').value.trim() || null,
+                bio: document.getElementById('editBio').value.trim() || null,
+                notifications_enabled: document.getElementById('editNotifications').checked
+            })
+        });
+        if (r.ok) { showNotification('Профиль обновлён', 'success'); loadProfile(); }
+        else { const d = await r.json(); showNotification(d.error.message, 'error'); }
+    } catch (e) { showNotification('Ошибка', 'error'); }
+}
+
+async function buyVip() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    if (!confirm('Купить VIP за 100 мекселей?')) return;
+    try {
+        const r = await fetch('/api/auth/vip/buy', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+        const d = await r.json();
+        if (r.ok) { showNotification('VIP активирован!', 'success'); loadProfile(); }
+        else showNotification(d.error.message, 'error');
+    } catch (e) { showNotification('Ошибка', 'error'); }
+}
+</script>
+
+<style>
+.profile-header{display:flex;gap:2rem;align-items:flex-start;padding:3rem 0;border-bottom:1px solid var(--border);margin-bottom:2rem}
+.profile-avatar{width:120px;height:120px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:4rem;color:white;flex-shrink:0}
+.profile-info{flex:1}
+.profile-info h1{font-size:2rem;font-weight:800;margin-bottom:0.25rem}
+.profile-tag{color:var(--text-dim);font-size:1.1rem;margin-bottom:0.5rem}
+.profile-bio{color:var(--text-dim);margin-bottom:0.75rem;white-space:pre-wrap}
+.profile-badges{display:flex;gap:0.5rem;margin-bottom:0.75rem}
+.badge{padding:0.35rem 0.75rem;border-radius:50px;font-size:0.8rem;font-weight:600;display:inline-flex;align-items:center;gap:0.35rem}
+.badge-vip{background:rgba(255,193,7,0.15);color:#ffc107;border:1px solid rgba(255,193,7,0.3)}
+.badge-author{background:rgba(102,126,234,0.15);color:#667eea;border:1px solid rgba(102,126,234,0.3)}
+.profile-date{color:var(--text-dim);font-size:0.9rem}
+.profile-actions{display:flex;flex-direction:column;gap:1rem;align-items:flex-end}
+.profile-stats-box{display:flex;gap:2rem}
+.stat-item{display:flex;flex-direction:column;align-items:center}
+.stat-value{font-size:1.5rem;font-weight:700;background:var(--primary);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat-label{font-size:0.8rem;color:var(--text-dim)}
+.profile-form{max-width:600px;background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:20px;padding:2rem}
+.toggle-label{display:flex;align-items:center;gap:0.75rem;cursor:pointer}
+.toggle-label input[type="checkbox"]{width:20px;height:20px;accent-color:#667eea}
+.profile-edit-section,.profile-channel{margin-bottom:2rem}
+@media(max-width:768px){.profile-header{flex-direction:column;align-items:center;text-align:center}.profile-actions{align-items:center}}
+</style>
+{% endblock %}

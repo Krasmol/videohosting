@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Просмотр видео — ZTUBE{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="video-player-container">
+        <div class="video-player">
+            <video id="videoPlayer" controls autoplay playsinline>
+                <source id="videoSource" src="" type="video/mp4">
+            </video>
+        </div>
+        <div class="video-details">
+            <h1 id="videoTitle" class="video-title-large">Загрузка...</h1>
+            <div class="video-actions-bar">
+                <div class="video-stats">
+                    <span id="videoViews"><i class="fas fa-eye"></i> 0</span>
+                    <span id="videoDate"><i class="far fa-calendar"></i> ...</span>
+                    <span id="videoCategory" class="video-cat-badge"></span>
+                </div>
+                <div class="video-actions">
+                    <button class="btn btn-outline btn-sm" id="likeBtn" onclick="reactVideo('like')">
+                        <i class="fas fa-thumbs-up"></i> <span id="likeCount">0</span>
+                    </button>
+                    <button class="btn btn-outline btn-sm" id="dislikeBtn" onclick="reactVideo('dislike')">
+                        <i class="fas fa-thumbs-down"></i> <span id="dislikeCount">0</span>
+                    </button>
+                    <button class="btn btn-outline btn-sm" onclick="showReportModal()">
+                        <i class="fas fa-flag"></i>
+                    </button>
+                    <button class="btn btn-primary btn-sm" onclick="createRoomForVideo()">
+                        <i class="fas fa-users"></i> Комната
+                    </button>
+                    <button class="btn btn-outline btn-sm" onclick="shareVideo()">
+                        <i class="fas fa-share"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="channel-info-box">
+                <div class="channel-info-left" onclick="goToChannel()">
+                    <div class="channel-avatar-small"><i class="fas fa-tv"></i></div>
+                    <div class="channel-details">
+                        <h3 id="channelName">...</h3>
+                        <p id="channelSubs">0 подписчиков</p>
+                    </div>
+                </div>
+                <div class="channel-actions-right">
+                    <button id="subscribeBtn" class="btn btn-primary" onclick="toggleSubscribe()" style="display:none;"><i class="fas fa-bell"></i> Подписаться</button>
+                    <button id="unsubscribeBtn" class="btn btn-outline" onclick="toggleSubscribe()" style="display:none;"><i class="fas fa-bell-slash"></i> Отписаться</button>
+                </div>
+            </div>
+            <div class="video-description-box">
+                <h3>Описание</h3>
+                <p id="videoDescription">...</p>
+                <div id="videoTags" class="video-tags-row"></div>
+            </div>
+
+            <div class="video-comments-box">
+                <h3>Комментарии</h3>
+                <div id="commentsForm" class="comment-form">
+                    <textarea id="commentInput" rows="3" maxlength="2000" placeholder="Напишите комментарий..."></textarea>
+                    <div class="comment-form-actions">
+                        <button class="btn btn-primary btn-sm" onclick="postComment()">Отправить</button>
+                    </div>
+                    <div id="commentError" class="error-message"></div>
+                </div>
+                <div id="commentsList" class="comments-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="reportModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('reportModal')">&times;</span>
+        <h2><i class="fas fa-flag"></i> Пожаловаться</h2>
+        <form onsubmit="submitReport(event)">
+            <div class="form-group">
+                <label>Причина жалобы</label>
+                <textarea name="reason" required maxlength="500" rows="3" placeholder="Опишите причину..."></textarea>
+            </div>
+            <div id="reportError" class="error-message"></div>
+            <button type="submit" class="btn btn-secondary btn-block">Отправить жалобу</button>
+        </form>
+    </div>
+</div>
+
+<script>
+const videoId = {{ video_id }};
+let currentVideo = null, currentChannel = null, currentUser = null, isSubscribed = false, subscriptionId = null;
+
+document.addEventListener('DOMContentLoaded', function() { checkUserAuth(); loadVideo(); });
+
+async function checkUserAuth() {
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            const r = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+            if (r.ok) currentUser = await r.json();
+        } catch (e) {}
+    }
+}
+
+async function loadVideo() {
+    try {
+        const r = await fetch('/api/videos/' + videoId);
+        if (!r.ok) { showError('Видео не найдено'); return; }
+        currentVideo = await r.json();
+        document.getElementById('videoTitle').textContent = currentVideo.title;
+        document.getElementById('videoDescription').textContent = currentVideo.description || 'Нет описания';
+        document.getElementById('videoDate').innerHTML = '<i class="far fa-calendar"></i> ' + new Date(currentVideo.created_at).toLocaleDateString('ru-RU');
+        document.getElementById('videoViews').innerHTML = '<i class="fas fa-eye"></i> ' + (currentVideo.views_count || 0);
+        document.getElementById('likeCount').textContent = currentVideo.likes_count || 0;
+        document.getElementById('dislikeCount').textContent = currentVideo.dislikes_count || 0;
+        const cats = {gaming:'Игры',music:'Музыка',education:'Образование',entertainment:'Развлечения',tech:'Технологии',sports:'Спорт',news:'Новости',blog:'Блог',other:'Другое'};
+        const catName = currentVideo.all_categories ? 'Все категории' : (cats[currentVideo.category] || '');
+        if (catName) document.getElementById('videoCategory').textContent = catName;
+        if (currentVideo.tags) {
+            const tags = currentVideo.tags.split(',').map(t => t.trim()).filter(Boolean);
+            document.getElementById('videoTags').innerHTML = tags.map(t => '<span class="video-tag">#' + escapeHtml(t) + '</span>').join('');
+        }
+        await loadChannel(currentVideo.channel_id);
+        await loadStream();
+        await loadMyReaction();
+        await loadComments();
+    } catch (e) { showError('Ошибка загрузки'); }
+}
+
+async function loadComments() {
+    const list = document.getElementById('commentsList');
+    const form = document.getElementById('commentsForm');
+    if (!currentUser) {
+        form.style.opacity = '0.7';
+    }
+    try {
+        const r = await fetch('/api/videos/' + videoId + '/comments');
+        if (!r.ok) { list.innerHTML = '<p class="muted">Комментарии недоступны</p>'; return; }
+        const comments = await r.json();
+        if (!comments.length) { list.innerHTML = '<p class="muted">Пока нет комментариев</p>'; return; }
+        list.innerHTML = comments.map(renderComment).join('');
+    } catch (e) {
+        list.innerHTML = '<p class="muted">Ошибка загрузки комментариев</p>';
+    }
+}
+
+function renderComment(c) {
+    const canDelete = currentUser && (currentUser.is_admin || currentUser.is_moderator || (c.user && c.user.id === currentUser.id) || (c.user_id && c.user_id === currentUser.id));
+    const author = c.user ? (c.user.display_name || c.user.username) : (c.user_display || 'Пользователь');
+    const created = c.created_at ? new Date(c.created_at).toLocaleString('ru-RU') : '';
+    return `
+        <div class="comment-item">
+            <div class="comment-meta">
+                <span class="comment-author">${escapeHtml(author)}</span>
+                <span class="comment-date">${escapeHtml(created)}</span>
+                ${canDelete ? `<button class="btn btn-outline btn-xs" onclick="deleteComment(${c.id})"><i class=\"fas fa-trash\"></i></button>` : ''}
+            </div>
+            <div class="comment-text">${escapeHtml(c.content)}</div>
+        </div>
+    `;
+}
+
+async function postComment() {
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    const input = document.getElementById('commentInput');
+    const errDiv = document.getElementById('commentError');
+    errDiv.classList.remove('show');
+    const content = (input.value || '').trim();
+    if (!content) { errDiv.textContent = 'Комментарий не может быть пустым'; errDiv.classList.add('show'); return; }
+    try {
+        const r = await fetch('/api/videos/' + videoId + '/comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ content })
+        });
+        if (r.ok) {
+            input.value = '';
+            await loadComments();
+            showNotification('Комментарий добавлен', 'success');
+        } else {
+            const data = await r.json();
+            errDiv.textContent = (data.error && data.error.message) ? data.error.message : 'Ошибка';
+            errDiv.classList.add('show');
+        }
+    } catch (e) {
+        errDiv.textContent = 'Ошибка подключения';
+        errDiv.classList.add('show');
+    }
+}
+
+async function deleteComment(commentId) {
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    try {
+        const r = await fetch('/api/videos/comments/' + commentId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+        if (r.ok) {
+            await loadComments();
+            showNotification('Комментарий удалён', 'success');
+        }
+    } catch (e) {}
+}
+
+async function loadChannel(chId) {
+    try {
+        const r = await fetch('/api/channels/' + chId);
+        if (r.ok) {
+            currentChannel = await r.json();
+            document.getElementById('channelName').textContent = currentChannel.name;
+            document.getElementById('channelSubs').textContent = currentChannel.subscriber_count + ' подписчиков';
+            if (currentUser) await checkSubscription();
+        }
+    } catch (e) {}
+}
+
+async function loadStream() {
+    try {
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const r = await fetch('/api/videos/' + videoId + '/stream', { headers });
+        if (r.ok) {
+            const data = await r.json();
+            document.getElementById('videoSource').src = data.stream_url;
+            const vp = document.getElementById('videoPlayer');
+            vp.load();
+            // Try autoplay. If the browser blocks (common), retry muted.
+            try {
+                await vp.play();
+            } catch (e) {
+                try {
+                    vp.muted = true;
+                    await vp.play();
+                } catch (e2) {}
+            }
+        } else if (r.status === 403) showError('Нет доступа. Подпишитесь на канал.');
+    } catch (e) {}
+}
+
+async function loadMyReaction() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+        const r = await fetch('/api/videos/' + videoId + '/reaction', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (r.ok) {
+            const data = await r.json();
+            updateReactionUI(data.user_reaction, data.likes, data.dislikes);
+        }
+    } catch (e) {}
+}
+
+function updateReactionUI(userReaction, likes, dislikes) {
+    document.getElementById('likeCount').textContent = likes;
+    document.getElementById('dislikeCount').textContent = dislikes;
+    document.getElementById('likeBtn').className = 'btn btn-sm ' + (userReaction === 'like' ? 'btn-primary' : 'btn-outline');
+    document.getElementById('dislikeBtn').className = 'btn btn-sm ' + (userReaction === 'dislike' ? 'btn-secondary' : 'btn-outline');
+}
+
+async function reactVideo(type) {
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    try {
+        const r = await fetch('/api/videos/' + videoId + '/react', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ type: type })
+        });
+        if (r.ok) {
+            const data = await r.json();
+            updateReactionUI(data.user_reaction, data.likes, data.dislikes);
+        }
+    } catch (e) {}
+}
+
+function showReportModal() {
+    if (!localStorage.getItem('token')) { showLoginModal(); return; }
+    showModal('reportModal');
+}
+
+async function submitReport(event) {
+    event.preventDefault();
+    const form = event.target;
+    const reason = new FormData(form).get('reason');
+    const token = localStorage.getItem('token');
+    const errDiv = document.getElementById('reportError');
+    errDiv.classList.remove('show');
+    try {
+        const r = await fetch('/api/videos/' + videoId + '/report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ reason: reason })
+        });
+        if (r.ok) { closeModal('reportModal'); form.reset(); showNotification('Жалоба отправлена', 'success'); }
+        else { const data = await r.json(); errDiv.textContent = data.error.message; errDiv.classList.add('show'); }
+    } catch (e) { errDiv.textContent = 'Ошибка'; errDiv.classList.add('show'); }
+}
+
+async function checkSubscription() {
+    if (!currentUser || !currentChannel) return;
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/subscriptions/my', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (r.ok) {
+            const subs = await r.json();
+            const sub = subs.find(s => s.channel_id === currentChannel.id);
+            if (sub) { isSubscribed = true; subscriptionId = sub.id; document.getElementById('unsubscribeBtn').style.display = 'inline-flex'; }
+            else document.getElementById('subscribeBtn').style.display = 'inline-flex';
+        }
+    } catch (e) {}
+}
+
+async function toggleSubscribe() {
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    try {
+        if (isSubscribed) {
+            const r = await fetch('/api/subscriptions/' + subscriptionId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+            if (r.ok) { isSubscribed = false; document.getElementById('unsubscribeBtn').style.display = 'none'; document.getElementById('subscribeBtn').style.display = 'inline-flex'; await loadChannel(currentChannel.id); }
+        } else {
+            const r = await fetch('/api/subscriptions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ channel_id: currentChannel.id, is_sponsor: false }) });
+            if (r.ok) { const sub = await r.json(); isSubscribed = true; subscriptionId = sub.id; document.getElementById('subscribeBtn').style.display = 'none'; document.getElementById('unsubscribeBtn').style.display = 'inline-flex'; await loadChannel(currentChannel.id); }
+        }
+    } catch (e) {}
+}
+
+function shareVideo() {
+    if (navigator.clipboard) { navigator.clipboard.writeText(window.location.href); showNotification('Ссылка скопирована!', 'success'); }
+}
+
+async function createRoomForVideo() {
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    if (!currentVideo) return;
+    try {
+        const r = await fetch('/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ video_id: currentVideo.id }) });
+        if (r.ok) { const room = await r.json(); window.location.href = '/room/' + room.id; }
+    } catch (e) {}
+}
+
+function goToChannel() { if (currentChannel) window.location.href = '/channel/' + currentChannel.id; }
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+function showError(msg) {
+    document.querySelector('.video-player-container').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-circle"></i><h3>' + msg + '</h3><button class="btn btn-primary" onclick="window.location.href=\'/\'"><i class="fas fa-home"></i> На главную</button></div>';
+}
+</script>
+
+<style>
+.video-player-container{max-width:1200px;margin:0 auto;padding:2rem 0}
+.video-player{background:#000;border-radius:20px;overflow:hidden;margin-bottom:1.5rem;box-shadow:0 10px 40px rgba(0,0,0,0.5)}
+.video-player video{width:100%;display:block;aspect-ratio:16/9}
+.video-details{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:20px;padding:2rem}
+.video-title-large{font-size:1.8rem;font-weight:700;margin-bottom:1rem}
+.video-actions-bar{display:flex;justify-content:space-between;align-items:center;padding-bottom:1.5rem;border-bottom:1px solid var(--border);margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+.video-stats{display:flex;gap:1.5rem;color:var(--text-dim);align-items:center}
+.video-cat-badge{background:rgba(102,126,234,0.15);color:#667eea;padding:0.25rem 0.75rem;border-radius:50px;font-size:0.8rem;font-weight:600}
+.video-actions{display:flex;gap:0.5rem;flex-wrap:wrap}
+.btn-sm{padding:0.5rem 1rem;font-size:0.9rem}
+.channel-info-box{display:flex;justify-content:space-between;align-items:center;padding:1.5rem 0;border-bottom:1px solid var(--border)}
+.channel-info-left{display:flex;gap:1rem;align-items:center;cursor:pointer}
+.channel-avatar-small{width:60px;height:60px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.8rem;color:white}
+.channel-details h3{font-size:1.1rem;font-weight:600;margin-bottom:0.25rem}
+.channel-details p{color:var(--text-dim);font-size:0.9rem}
+.video-description-box{padding:1.5rem 0}
+.video-description-box h3{font-size:1.2rem;font-weight:600;margin-bottom:1rem}
+.video-description-box p{color:var(--text-dim);line-height:1.6;white-space:pre-wrap}
+.video-tags-row{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:1rem}
+.video-tag{background:rgba(102,126,234,0.1);color:#667eea;padding:0.25rem 0.75rem;border-radius:50px;font-size:0.8rem;font-weight:500}
+</style>
+{% endblock %}

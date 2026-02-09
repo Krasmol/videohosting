@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% block title %}Канал — ZTUBE{% endblock %}
+{% block content %}
+<div class="channel-page-layout">
+    <div class="channel-banner" id="channelBanner">
+        <div style="width:100%;height:100%;background:linear-gradient(135deg,rgba(102,126,234,0.3),rgba(118,75,162,0.3),rgba(245,87,108,0.2));"></div>
+    </div>
+    <div class="channel-profile-row">
+        <div class="channel-avatar-large" id="channelAvatar"><i class="fas fa-tv"></i></div>
+        <div class="channel-profile-info">
+            <h1 id="channelName">Загрузка...</h1>
+            <div class="channel-handle" id="channelHandle"></div>
+            <div class="channel-stats-row">
+                <span id="subscriberCount">0 подписчиков</span>
+                <span id="videoCount">0 видео</span>
+                <span id="channelDate"></span>
+            </div>
+        </div>
+        <div class="channel-profile-actions" id="channelActions"></div>
+    </div>
+    <div class="channel-tabs" id="channelTabs">
+        <div class="channel-tab active" data-tab="videos" onclick="switchTab('videos',this)">Видео</div>
+        <div class="channel-tab" data-tab="about" onclick="switchTab('about',this)">О канале</div>
+        <div class="channel-tab" data-tab="settings" onclick="switchTab('settings',this)" id="settingsTab" style="display:none;">Настройки</div>
+    </div>
+    <div class="channel-tab-content active" id="tab-videos">
+        <div class="video-grid" id="channelVideos">
+            <div class="loading"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>
+        </div>
+    </div>
+    <div class="channel-tab-content" id="tab-about">
+        <div class="channel-about-section">
+            <div class="about-block">
+                <h3><i class="fas fa-info-circle"></i> Описание</h3>
+                <p id="aboutDescription">Нет описания</p>
+            </div>
+            <div class="about-block">
+                <h3><i class="fas fa-chart-bar"></i> Статистика</h3>
+                <div class="about-stats" id="aboutStats"></div>
+            </div>
+            <div class="about-block" id="aboutSubsBlock" style="display:none;">
+                <h3><i class="fas fa-users"></i> Подписчики</h3>
+                <div id="subscribersList" class="subs-list" style="display:flex;flex-wrap:wrap;gap:0.75rem;"></div>
+            </div>
+        </div>
+    </div>
+    <div class="channel-tab-content" id="tab-settings">
+        <div class="channel-settings-form">
+            <h2 style="margin-bottom:1.5rem;font-size:1.4rem;font-weight:700;">Настройки канала и профиля</h2>
+            <form onsubmit="saveAllSettings(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Название канала</label>
+                        <input type="text" id="setChannelName" maxlength="100">
+                    </div>
+                    <div class="form-group">
+                        <label>Никнейм</label>
+                        <input type="text" id="setDisplayName" maxlength="80">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Описание канала</label>
+                    <textarea id="setChannelDesc" rows="3" maxlength="1000"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>О себе (био)</label>
+                    <textarea id="setBio" rows="2" maxlength="500"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="setEmail" disabled style="opacity:0.6;">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Уведомления</label>
+                        <label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer;">
+                            <input type="checkbox" id="setNotifications" checked style="width:20px;height:20px;accent-color:#667eea;">
+                            <span>Получать уведомления</span>
+                        </label>
+                    </div>
+                    <div class="form-group" id="vipBlock">
+                        <label>VIP статус</label>
+                        <div id="vipStatus"></div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:1rem;margin-top:1rem;">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const channelId = {{ channel_id }};
+let currentUser = null, channelData = null, isOwner = false, isSubscribed = false, subscriptionId = null;
+
+document.addEventListener('DOMContentLoaded', () => { checkUserAuth(); });
+
+async function checkUserAuth() {
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            const r = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+            if (r.ok) currentUser = await r.json();
+        } catch (e) {}
+    }
+    loadChannelData();
+}
+
+async function loadChannelData() {
+    try {
+        const cr = await fetch('/api/channels/' + channelId);
+        if (!cr.ok) { document.querySelector('.channel-page-layout').innerHTML = '<div class="empty-state"><i class="fas fa-tv"></i><h3>Канал не найден</h3></div>'; return; }
+        channelData = await cr.json();
+        isOwner = currentUser && currentUser.id === channelData.author_id;
+
+        document.getElementById('channelName').textContent = channelData.name;
+        document.getElementById('subscriberCount').textContent = channelData.subscriber_count + ' подписчиков';
+        document.getElementById('aboutDescription').textContent = channelData.description || 'Нет описания';
+
+        if (isOwner) {
+            document.getElementById('channelHandle').textContent = currentUser.tag;
+            document.getElementById('settingsTab').style.display = 'block';
+            document.getElementById('channelActions').innerHTML = '<button class="btn btn-primary" onclick="showUploadModal()"><i class="fas fa-upload"></i> Загрузить</button>';
+            fillSettings();
+        } else if (currentUser) {
+            await checkSubscription();
+            renderSubButtons();
+        }
+
+        const ur = await fetch('/api/auth/users/' + channelData.author_id);
+        if (ur.ok) {
+            const owner = await ur.json();
+            if (!isOwner) document.getElementById('channelHandle').textContent = owner.tag;
+            document.getElementById('channelDate').textContent = 'С ' + new Date(owner.created_at).toLocaleDateString('ru-RU');
+        }
+
+        const vr = await fetch('/api/channels/' + channelId + '/videos');
+        if (vr.ok) {
+            const d = await vr.json();
+            const videos = d.videos || d;
+            document.getElementById('videoCount').textContent = videos.length + ' видео';
+            displayVideos(videos);
+            renderAboutStats(videos);
+        }
+
+        if (isOwner) loadSubscribers();
+    } catch (e) {}
+}
+
+function fillSettings() {
+    document.getElementById('setChannelName').value = channelData.name || '';
+    document.getElementById('setChannelDesc').value = channelData.description || '';
+    document.getElementById('setDisplayName').value = currentUser.display_name || '';
+    document.getElementById('setBio').value = currentUser.bio || '';
+    document.getElementById('setEmail').value = currentUser.email || '';
+    document.getElementById('setNotifications').checked = currentUser.notifications_enabled;
+    if (currentUser.is_vip) {
+        document.getElementById('vipStatus').innerHTML = '<span class="badge badge-vip" style="font-size:1rem;padding:0.5rem 1rem;"><i class="fas fa-crown"></i> VIP активен</span>';
+    } else {
+        document.getElementById('vipStatus').innerHTML = '<span style="color:var(--text-dim);">' + currentUser.mexels + ' мекселей</span><br><button type="button" class="btn btn-outline btn-sm" onclick="buyVip()" style="margin-top:0.5rem;"><i class="fas fa-crown"></i> Купить VIP (100)</button>';
+    }
+}
+
+async function saveAllSettings(event) {
+    event.preventDefault();
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+        const chResp = await fetch('/api/channels/' + channelId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ name: document.getElementById('setChannelName').value.trim(), description: document.getElementById('setChannelDesc').value.trim() })
+        });
+        const profResp = await fetch('/api/auth/me', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({
+                display_name: document.getElementById('setDisplayName').value.trim() || null,
+                bio: document.getElementById('setBio').value.trim() || null,
+                notifications_enabled: document.getElementById('setNotifications').checked
+            })
+        });
+        if (chResp.ok && profResp.ok) {
+            showNotification('Настройки сохранены', 'success');
+            const meR = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+            if (meR.ok) currentUser = await meR.json();
+            loadChannelData();
+        } else {
+            showNotification('Ошибка сохранения', 'error');
+        }
+    } catch (e) { showNotification('Ошибка', 'error'); }
+}
+
+async function buyVip() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    if (!confirm('Купить VIP за 100 мекселей?')) return;
+    try {
+        const r = await fetch('/api/auth/vip/buy', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+        const d = await r.json();
+        if (r.ok) { showNotification('VIP активирован!', 'success'); location.reload(); }
+        else showNotification(d.error.message, 'error');
+    } catch (e) {}
+}
+
+async function checkSubscription() {
+    if (!currentUser) return;
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/subscriptions/my', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (r.ok) {
+            const subs = await r.json();
+            const sub = subs.find(s => s.channel_id === channelId);
+            if (sub) { isSubscribed = true; subscriptionId = sub.id; }
+        }
+    } catch (e) {}
+}
+
+function renderSubButtons() {
+    const actions = document.getElementById('channelActions');
+    if (isSubscribed) {
+        actions.innerHTML = '<button class="btn btn-outline" onclick="toggleSubscribe()"><i class="fas fa-bell-slash"></i> Отписаться</button>';
+    } else {
+        actions.innerHTML = '<button class="btn btn-primary" onclick="toggleSubscribe()"><i class="fas fa-bell"></i> Подписаться</button>';
+    }
+}
+
+async function toggleSubscribe() {
+    const token = localStorage.getItem('token');
+    if (!token) { showLoginModal(); return; }
+    try {
+        if (isSubscribed) {
+            const r = await fetch('/api/subscriptions/' + subscriptionId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+            if (r.ok) { isSubscribed = false; showNotification('Отписались', 'info'); loadChannelData(); renderSubButtons(); }
+        } else {
+            const r = await fetch('/api/subscriptions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ channel_id: channelId, is_sponsor: false }) });
+            if (r.ok) { const sub = await r.json(); isSubscribed = true; subscriptionId = sub.id; showNotification('Подписались!', 'success'); loadChannelData(); renderSubButtons(); }
+        }
+    } catch (e) {}
+}
+
+async function loadSubscribers() {
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/channels/' + channelId + '/subscribers', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!r.ok) return;
+        const subs = await r.json();
+        if (subs.length === 0) return;
+        document.getElementById('aboutSubsBlock').style.display = 'block';
+        document.getElementById('subscribersList').innerHTML = subs.map(s =>
+            '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;background:var(--glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;" onclick="window.location.href=\'/profile/' + s.user.id + '\'">' +
+            '<div style="width:32px;height:32px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;color:white;font-size:0.9rem;"><i class="fas fa-user"></i></div>' +
+            '<span>' + escapeHtml(s.user.username) + '</span>' +
+            (s.is_sponsor ? '<span style="background:rgba(255,193,7,0.15);color:#ffc107;border:1px solid rgba(255,193,7,0.3);padding:0.15rem 0.5rem;border-radius:50px;font-size:0.7rem;font-weight:600;">Спонсор</span>' : '') +
+            '</div>'
+        ).join('');
+    } catch (e) {}
+}
+
+function renderAboutStats(videos) {
+    const totalViews = videos.reduce((s, v) => s + (v.views_count || 0), 0);
+    const totalLikes = videos.reduce((s, v) => s + (v.likes_count || 0), 0);
+    document.getElementById('aboutStats').innerHTML =
+        '<div class="about-stat"><div class="stat-num">' + videos.length + '</div><div class="stat-lbl">Видео</div></div>' +
+        '<div class="about-stat"><div class="stat-num">' + (channelData.subscriber_count || 0) + '</div><div class="stat-lbl">Подписчиков</div></div>' +
+        '<div class="about-stat"><div class="stat-num">' + totalViews + '</div><div class="stat-lbl">Просмотров</div></div>' +
+        '<div class="about-stat"><div class="stat-num">' + totalLikes + '</div><div class="stat-lbl">Лайков</div></div>';
+}
+
+function switchTab(tabId, el) {
+    document.querySelectorAll('.channel-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.channel-tab-content').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-' + tabId).classList.add('active');
+}
+
+function displayVideos(videos) {
+    const c = document.getElementById('channelVideos');
+    if (videos.length === 0) { c.innerHTML = '<div class="empty-state"><i class="fas fa-video"></i><h3>Нет видео</h3><p>Загрузите первое видео!</p></div>'; return; }
+    c.innerHTML = videos.map(v => {
+        const dur = formatDuration(v.duration);
+        const cats = {gaming:'Игры',music:'Музыка',education:'Образование',entertainment:'Развлечения',tech:'Технологии',sports:'Спорт',news:'Новости',blog:'Блог',other:'Другое'};
+        return '<div class="video-card" onclick="window.location.href=\'/video/' + v.id + '\'">' +
+            '<div class="video-thumbnail">' +
+            (v.thumbnail_url ? '<img src="' + v.thumbnail_url + '" alt="">' : '<i class="fas fa-play-circle" style="color:rgba(255,255,255,0.3);font-size:3rem;"></i>') +
+            '<div class="play-overlay"><i class="fas fa-play" style="color:white;font-size:1.5rem;margin-left:4px;"></i></div>' +
+            '<span class="duration-badge">' + dur + '</span>' +
+            (v.access_level !== 'public' ? '<span class="video-badge">' + (v.access_level === 'sponsor' ? '💎' : '🔒') + '</span>' : '') +
+            '</div>' +
+            '<div class="video-info">' +
+            '<h3 class="video-title">' + escapeHtml(v.title) + '</h3>' +
+            '<div class="video-meta">' +
+            '<span>' + (v.views_count || 0) + ' <i class="fas fa-eye"></i></span>' +
+            '<span>' + (v.likes_count || 0) + ' <i class="fas fa-thumbs-up"></i></span>' +
+            '<span>' + (cats[v.category] || '') + '</span>' +
+            '</div>' +
+            '</div></div>';
+    }).join('');
+}
+
+function formatDuration(s) {
+    if (!s) return '0:00';
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (h > 0) return h + ':' + String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+    return m + ':' + String(sec).padStart(2,'0');
+}
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+</script>
+
+<style>
+.badge-vip{background:rgba(255,193,7,0.15);color:#ffc107;border:1px solid rgba(255,193,7,0.3);padding:0.35rem 0.75rem;border-radius:50px;font-size:0.8rem;font-weight:600;display:inline-flex;align-items:center;gap:0.35rem}
+</style>
+{% endblock %}

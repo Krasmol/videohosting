@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ZTUBE — Видеоплатформа{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modern.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand" onclick="window.location.href='/'">
+                <i class="fas fa-bolt"></i>
+                <span>ZTUBE</span>
+            </div>
+            <div class="nav-search">
+                <input type="text" placeholder="Поиск видео..." id="searchInput">
+                <button><i class="fas fa-search"></i></button>
+            </div>
+            <div class="nav-menu">
+                <a href="/rooms" class="nav-link">
+                    <i class="fas fa-users"></i> Комнаты
+                </a>
+                <div id="authButtons" style="display: none;">
+                    <button class="btn btn-outline" onclick="showLoginModal()">Войти</button>
+                    <button class="btn btn-primary" onclick="showRegisterModal()">Регистрация</button>
+                </div>
+                <div id="userMenu" style="display: none;">
+                    <button class="btn btn-primary" onclick="showUploadModal()">
+                        <i class="fas fa-upload"></i> Загрузить
+                    </button>
+                    <div class="notif-bell" onclick="toggleNotifPanel()" id="notifBell" style="display:none;">
+                        <i class="fas fa-bell"></i>
+                        <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
+                    </div>
+                    <a href="/messages" class="nav-link" id="msgLink" style="display:none;">
+                        <i class="fas fa-envelope"></i>
+                    </a>
+                    <div class="user-avatar" onclick="toggleUserDropdown()">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div class="user-dropdown" id="userDropdown">
+                        <a href="#" onclick="showMyChannel()"><i class="fas fa-tv"></i> Мой канал</a>
+                        <a href="#" onclick="showSubscriptions()"><i class="fas fa-heart"></i> Подписки</a>
+                        <a href="/messages"><i class="fas fa-envelope"></i> Сообщения</a>
+                        <a href="#" id="adminLink" style="display:none;" onclick="window.location.href='/admin'"><i class="fas fa-shield-alt"></i> Админ-панель</a>
+                        <a href="#" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Выйти</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="notifPanel" class="notif-panel" style="display:none;">
+        <div class="notif-panel-header">
+            <h3>Уведомления</h3>
+            <button class="btn btn-ghost btn-sm" onclick="markAllNotifsRead()">Прочитать все</button>
+        </div>
+        <div id="notifList" class="notif-list"></div>
+    </div>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-left">
+                <span class="footer-copy">© {{ current_year }} ZTUBE</span>
+            </div>
+            <div class="footer-right">
+                <a class="footer-link" href="/terms">Пользовательское соглашение</a>
+            </div>
+        </div>
+    </footer>
+
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('loginModal')">&times;</span>
+            <h2><i class="fas fa-sign-in-alt"></i> Вход</h2>
+            <form id="loginForm" onsubmit="login(event)">
+                <div class="form-group">
+                    <label>Логин</label>
+                    <input type="text" name="username" required placeholder="Только буквы, цифры, _ и .">
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <div style="position:relative;">
+                        <input type="password" name="password" required id="loginPassword">
+                        <button type="button" class="pwd-eye-btn" onclick="togglePasswordVisibility('loginPassword', this)" tabindex="-1">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="loginError" class="error-message"></div>
+                <button type="submit" class="btn btn-primary btn-block">Войти</button>
+            </form>
+            <p class="modal-footer">
+                Нет аккаунта? <a href="#" onclick="closeModal('loginModal'); showRegisterModal()">Зарегистрироваться</a>
+            </p>
+        </div>
+    </div>
+
+    <div id="registerModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('registerModal')">&times;</span>
+            <h2><i class="fas fa-user-plus"></i> Регистрация</h2>
+            <form id="registerForm" onsubmit="register(event)">
+                <div class="form-group">
+                    <label>Логин (для входа)</label>
+                    <input type="text" name="username" required placeholder="Только буквы, цифры, _ и .">
+                    <small>3-30 символов, без спецсимволов</small>
+                </div>
+                <div class="form-group">
+                    <label>Никнейм (отображаемое имя)</label>
+                    <input type="text" name="display_name" placeholder="Как вас будут видеть другие">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <div style="position:relative;flex:1;">
+                            <input type="password" name="password" required id="regPassword" oninput="onPasswordInput()">
+                            <button type="button" class="pwd-eye-btn" onclick="togglePasswordVisibility('regPassword', this)" tabindex="-1">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="generatePwd()" style="white-space:nowrap;">Генерация</button>
+                    </div>
+                    <div id="pwdStrength" class="pwd-strength-bar" style="margin-top:0.5rem;"></div>
+                    <small>Мин. 6 символов. Без &lt;&gt;"';& и подобных</small>
+                </div>
+                <div class="form-group" id="confirmPwdGroup" style="display:none;">
+                    <label>Подтвердите пароль</label>
+                    <div style="position:relative;">
+                        <input type="password" name="password_confirm" id="regPasswordConfirm" oninput="checkPasswordMatch()">
+                        <button type="button" class="pwd-eye-btn" onclick="togglePasswordVisibility('regPasswordConfirm', this)" tabindex="-1">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div id="pwdMatchStatus" style="margin-top:0.25rem;font-size:0.8rem;"></div>
+                </div>
+                <div id="registerError" class="error-message"></div>
+                <button type="submit" class="btn btn-primary btn-block">Зарегистрироваться</button>
+            </form>
+            <p class="modal-footer">
+                Уже есть аккаунт? <a href="#" onclick="closeModal('registerModal'); showLoginModal()">Войти</a>
+            </p>
+        </div>
+    </div>
+
+    <div id="uploadModal" class="modal">
+        <div class="modal-content" style="max-width:600px;">
+            <span class="close" onclick="closeModal('uploadModal')">&times;</span>
+            <h2><i class="fas fa-upload"></i> Загрузить видео</h2>
+            <form id="uploadForm" onsubmit="uploadVideo(event)">
+                <div class="form-group">
+                    <label>Название видео</label>
+                    <input type="text" name="title" required maxlength="100">
+                    <small id="titleCounter">0/100</small>
+                </div>
+                <div class="form-group">
+                    <label>Описание</label>
+                    <textarea name="description" rows="3" maxlength="2000"></textarea>
+                    <small id="descCounter">0/2000</small>
+                </div>
+                <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div class="form-group">
+                        <label>Категория</label>
+                        <select name="category">
+                            <option value="other">Другое</option>
+                            <option value="gaming">Игры</option>
+                            <option value="music">Музыка</option>
+                            <option value="education">Образование</option>
+                            <option value="entertainment">Развлечения</option>
+                            <option value="tech">Технологии</option>
+                            <option value="sports">Спорт</option>
+                            <option value="news">Новости</option>
+                            <option value="blog">Блог</option>
+                        </select>
+                        <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem;">
+                            <input type="checkbox" name="all_categories" id="allCategoriesCheckbox">
+                            <label for="allCategoriesCheckbox" style="margin:0;font-weight:500;">Публиковать во всех категориях</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Уровень доступа</label>
+                        <select name="access_level">
+                            <option value="public">Публичное</option>
+                            <option value="subscriber">Подписчики</option>
+                            <option value="sponsor">Спонсоры</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Теги (через запятую)</label>
+                    <input type="text" name="tags" maxlength="500" placeholder="игры, летсплей, обзор">
+                </div>
+                <div class="form-group">
+                    <label>Обложка видео</label>
+                    <div class="thumbnail-upload-area" id="thumbUploadArea" onclick="document.getElementById('thumbInput').click()">
+                        <input type="file" name="thumbnail" id="thumbInput" accept="image/*" style="display:none;" onchange="previewThumbnail(this)">
+                        <div id="thumbPreview" class="thumb-preview-empty">
+                            <i class="fas fa-image"></i>
+                            <span>Нажмите для загрузки обложки</span>
+                            <small>JPG, PNG, WebP. Рекомендуется 1280x720</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Файл видео</label>
+                    <input type="file" name="file" accept="video/*" required onchange="handleVideoSelect(this)">
+                </div>
+                <input type="hidden" name="duration" id="videoDuration" value="60">
+                <div id="uploadError" class="error-message"></div>
+                <div id="uploadProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p id="progressText">Загрузка...</p>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Загрузить</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
