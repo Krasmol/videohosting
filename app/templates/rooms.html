@@ -66,7 +66,8 @@
                 <option value="tech" style="background:#1a1f3a;color:#fff;">Технологии</option>
                 <option value="sports" style="background:#1a1f3a;color:#fff;">Спорт</option>
                 <option value="news" style="background:#1a1f3a;color:#fff;">Новости</option>
-                <option value="blog" style="background:#1a1f3a;color:#fff;">Блог</option>
+                {# Категории синхронизированы с главной ("Блог" не используется) #}
+                <option value="other" style="background:#1a1f3a;color:#fff;">Другое</option>
             </select>
         </div>
         <div id="vpGrid" style="overflow-y:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;padding-right:0.5rem;"></div>
@@ -109,20 +110,25 @@ function filterPickerVideos() {
 function renderPickerGrid(videos) {
     const grid = document.getElementById('vpGrid');
     if (videos.length === 0) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--text-dim);">Нет видео</div>'; return; }
-    const cats = {gaming:'Игры',music:'Музыка',education:'Образование',entertainment:'Развлечения',tech:'Технологии',sports:'Спорт',news:'Новости',blog:'Блог',other:'Другое'};
+    // Категории синхронизированы с главной (без "Блог")
+    const cats = {gaming:'Игры',music:'Музыка',education:'Образование',entertainment:'Развлечения',tech:'Технологии',sports:'Спорт',news:'Новости',other:'Другое'};
     grid.innerHTML = videos.map(v => {
         const dur = formatDuration(v.duration);
-        return '<div class="vp-card" onclick="pickVideo(' + v.id + ',\'' + escapeHtml(v.title).replace(/'/g,"\\'") + '\',\'' + (v.thumbnail_url || '') + '\')" style="cursor:pointer;background:rgba(20,25,45,0.6);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;transition:all 0.2s;">' +
+        // Делаем подпись видимой всегда: рисуем заголовок поверх превью (градиент снизу).
+        const safeTitle = escapeHtml(v.title || '');
+        return '<div class="vp-card" onclick="pickVideo(' + v.id + ',\'' + safeTitle.replace(/'/g,"\\'") + '\',\'' + (v.thumbnail_url || '') + '\')" style="cursor:pointer;background:rgba(20,25,45,0.6);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;transition:all 0.2s;">' +
             '<div style="aspect-ratio:16/9;background:linear-gradient(135deg,#1a1f3a,#2d1b4e);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;">' +
             (v.thumbnail_url ? '<img src="' + v.thumbnail_url + '" style="width:100%;height:100%;object-fit:cover;">' : '<i class="fas fa-play-circle" style="color:rgba(255,255,255,0.3);font-size:2rem;"></i>') +
-            '<span style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.85);padding:2px 6px;border-radius:4px;font-size:0.7rem;font-weight:600;">' + dur + '</span>' +
+            '<div style="position:absolute;left:0;right:0;bottom:0;padding:8px 10px;background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0.85) 100%);">' +
+              '<div style="font-size:0.85rem;font-weight:650;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + safeTitle + '</div>' +
+              '<div style="margin-top:4px;font-size:0.72rem;color:rgba(255,255,255,0.82);display:flex;gap:10px;align-items:center;">' +
+                '<span>' + (v.views_count || 0) + ' <i class="fas fa-eye"></i></span>' +
+                '<span>' + (cats[v.category] || cats.other) + '</span>' +
+              '</div>' +
             '</div>' +
-            '<div style="padding:0.6rem;">' +
-            '<div style="font-size:0.85rem;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;margin-bottom:0.25rem;">' + escapeHtml(v.title) + '</div>' +
-            '<div style="font-size:0.75rem;color:var(--text-dim);display:flex;gap:0.5rem;">' +
-            '<span>' + (v.views_count || 0) + ' <i class="fas fa-eye"></i></span>' +
-            '<span>' + (cats[v.category] || '') + '</span>' +
-            '</div></div></div>';
+            '<span style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.8);padding:2px 6px;border-radius:6px;font-size:0.7rem;font-weight:700;">' + dur + '</span>' +
+            '</div>' +
+            '</div>';
     }).join('');
 }
 

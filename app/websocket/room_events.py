@@ -10,6 +10,36 @@ active_connections = {}
 message_cooldowns = {}
 
 
+def kick_user_from_room(room_id: int, user_id: int, reason: str = "kicked"):
+    """Принудительно выкинуть пользователя из Socket.IO комнаты и уведомить клиента.
+
+    Это доп. слой к HTTP-kick: даже если клиент всё ещё подключен к сокету,
+    он (1) получит событие 'kicked', (2) будет удалён из socket-room,
+    а также мы почистим active_connections.
+    """
+    if not room_id or not user_id:
+        return
+    room_name = str(room_id)
+    to_remove = []
+    for sid, info in active_connections.items():
+        if info.get('room_id') == room_id and info.get('user_id') == user_id:
+            try:
+                socketio.emit('kicked', {
+                    'room_id': room_id,
+                    'user_id': user_id,
+                    'reason': reason,
+                    'timestamp': datetime.utcnow().isoformat()
+                }, to=sid)
+                # Убираем из socket-room (чтобы не получал broadcast сообщений)
+                socketio.server.leave_room(sid, room_name)
+            except Exception:
+                # Не ломаем сервер из-за неудачного leave_room
+                pass
+            to_remove.append(sid)
+    for sid in to_remove:
+        active_connections.pop(sid, None)
+
+
 def delete_room_if_empty(room_id: int):
     if not room_id:
         return
@@ -212,6 +242,17 @@ def handle_play(data):
             emit('error', {'message': 'Room not found'})
             return
 
+        # Валидация: пользователь должен быть участником комнаты.
+        # (После kick участник удаляется из БД, но сокет мог остаться подключенным.)
+        participant = RoomParticipant.query.filter_by(
+            room_id=room_id,
+            user_id=user.id
+        ).first()
+        if not participant:
+            emit('error', {'message': 'You are not a participant of this room'})
+            kick_user_from_room(room_id, user.id, reason='not_participant')
+            return
+
         if room.owner_id != user.id:
             emit('error', {'message': 'Only room owner can control playback'})
             return
@@ -313,6 +354,16 @@ def handle_chat_message(data):
             emit('error', {'message': 'Room not found'})
             return
 
+        # ✅ ВАЖНО: пользователь должен быть участником комнаты
+        participant = RoomParticipant.query.filter_by(
+            room_id=room_id,
+            user_id=user.id
+        ).first()
+        if not participant:
+            emit('error', {'message': 'You are not a participant of this room'})
+            kick_user_from_room(room_id, user.id, reason='not_participant')
+            return
+
         if not message:
             emit('error', {'message': 'Message cannot be empty'})
             return
@@ -343,13 +394,7 @@ def handle_chat_message(data):
         )
         db.session.add(chat_message)
 
-        participant = RoomParticipant.query.filter_by(
-            room_id=room_id,
-            user_id=user.id
-        ).first()
-
-        if participant:
-            participant.last_message_at = datetime.utcnow()
+        participant.last_message_at = datetime.utcnow()
 
         db.session.commit()
 

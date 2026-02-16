@@ -4,6 +4,7 @@ from app import db
 from app.services.room_service import RoomService
 from app.models import Room, RoomParticipant, User, ChatMessage
 from app.api.auth import require_auth
+from app.websocket.room_events import kick_user_from_room
 
 rooms_bp = Blueprint('rooms', __name__)
 room_service = RoomService()
@@ -162,6 +163,9 @@ def kick_user(room_id, user_id):
     host = request.current_user
     try:
         room_service.kick_user(room_id, host.id, user_id)
+        # HTTP kick удаляет участника из БД, но сокет мог остаться подключенным.
+        # Принудительно выкидываем из Socket.IO комнаты и уведомляем клиента.
+        kick_user_from_room(room_id, user_id, reason='kicked_by_host')
         return jsonify({'message': 'User kicked successfully'}), 200
     except PermissionError as e:
         return jsonify({'error': {'code': 'FORBIDDEN', 'message': str(e)}}), 403

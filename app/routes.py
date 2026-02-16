@@ -49,6 +49,11 @@ def terms_page():
     return render_template('terms.html')
 
 
+@web_bp.route('/privacy')
+def privacy_page():
+    return render_template('privacy.html')
+
+
 @web_bp.route('/videos/<path:filename>')
 def serve_video(filename):
     video_folder = current_app.config['UPLOAD_FOLDER']

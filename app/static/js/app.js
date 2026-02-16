@@ -50,6 +50,8 @@ function showUserMenu(user) {
 
 function showModal(modalId) { document.getElementById(modalId).classList.add('show'); }
 function closeModal(modalId) { document.getElementById(modalId).classList.remove('show'); }
+// Backward-compatible alias (some templates call openModal)
+function openModal(modalId) { showModal(modalId); }
 function showLoginModal() { showModal('loginModal'); }
 function showRegisterModal() { showModal('registerModal'); }
 function showUploadModal() { showModal('uploadModal'); }
@@ -159,6 +161,17 @@ async function uploadVideo(event) {
     event.preventDefault();
     const form = event.target;
     const formData = new FormData(form);
+
+    // If user didn't pick a thumbnail, try to attach an auto-generated one (grabbed from ~2s video frame).
+    try {
+        const thumbInput = document.getElementById('thumbInput');
+        const hasCustomThumb = !!(thumbInput && thumbInput.files && thumbInput.files.length);
+        if (!hasCustomThumb && window.__autoThumbnailBlob) {
+            formData.set('thumbnail', window.__autoThumbnailBlob, window.__autoThumbnailName || 'auto_thumbnail.jpg');
+        }
+    } catch (e) {
+        // non-fatal
+    }
     const token = localStorage.getItem('token');
     if (!token) { showNotification('Необходимо войти', 'error'); return; }
     const errorDiv = document.getElementById('uploadError');
@@ -216,6 +229,66 @@ function handleVideoSelect(input) {
             document.getElementById('videoDuration').value = Math.floor(video.duration) || 60;
         };
         video.src = URL.createObjectURL(file);
+
+        // Auto-generate thumbnail if user hasn't selected one.
+        const thumbInput = document.getElementById('thumbInput');
+        const hasCustomThumb = !!(thumbInput && thumbInput.files && thumbInput.files.length);
+        if (!hasCustomThumb) {
+            generateAutoThumbnail(file);
+        }
+    }
+}
+
+async function generateAutoThumbnail(file) {
+    try {
+        const url = URL.createObjectURL(file);
+        const video = document.createElement('video');
+        video.src = url;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'metadata';
+
+        // Wait for metadata so we know duration
+        await new Promise((resolve, reject) => {
+            video.onloadedmetadata = () => resolve();
+            video.onerror = () => reject(new Error('metadata error'));
+        });
+
+        // Seek to ~2 seconds (or earlier if the video is very short)
+        const targetTime = Math.min(2, Math.max(0, (video.duration || 0) - 0.1));
+        video.currentTime = targetTime;
+
+        await new Promise((resolve, reject) => {
+            const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
+            video.addEventListener('seeked', onSeeked);
+            video.onerror = () => reject(new Error('seek error'));
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+        if (!blob) throw new Error('toBlob failed');
+
+        window.__autoThumbnailBlob = blob;
+        window.__autoThumbnailName = 'auto_thumbnail.jpg';
+
+        // Update UI preview
+        const preview = document.getElementById('thumbPreview');
+        if (preview) {
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
+            preview.className = 'thumb-preview-filled';
+        }
+
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        // If browser can't extract a frame (codec restrictions), just leave without thumbnail.
+        window.__autoThumbnailBlob = null;
+        window.__autoThumbnailName = null;
     }
 }
 
@@ -442,6 +515,9 @@ function previewThumbnail(input) {
     const file = input.files[0];
     const preview = document.getElementById('thumbPreview');
     if (file) {
+        // User picked a custom thumbnail → override auto one.
+        window.__autoThumbnailBlob = null;
+        window.__autoThumbnailName = null;
         const reader = new FileReader();
         reader.onload = function(e) {
             preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;

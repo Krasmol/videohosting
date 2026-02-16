@@ -1144,6 +1144,28 @@ body::before {
     margin: 0.5rem 1rem;
 }
 
+.zt-sidebar-legal {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1.25rem 0.25rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.zt-sidebar-legal-link {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    opacity: 0.9;
+}
+
+.zt-sidebar-legal-link:hover {
+    color: var(--text);
+    text-decoration: underline;
+}
+
 .zt-feed {
     padding: 1.5rem 2rem;
     overflow-y: auto;

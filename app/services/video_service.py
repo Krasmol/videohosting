@@ -253,9 +253,24 @@ class VideoService:
 
     @staticmethod
     def get_thumbnail_url(video: Video) -> Optional[str]:
+        # Happy path
         if video.thumbnail_path and os.path.exists(video.thumbnail_path):
             filename = os.path.basename(video.thumbnail_path)
             return f"/thumbnails/{filename}"
+
+        # Lazy auto-generation for older uploads that don't have a thumbnail yet.
+        # This keeps the UI from showing "нет превью" when ffmpeg is available.
+        try:
+            if (not video.thumbnail_path) and video.file_path and os.path.exists(video.file_path):
+                thumb = VideoService._generate_thumbnail(video.file_path, int(video.duration or 0))
+                if thumb:
+                    video.thumbnail_path = thumb
+                    db.session.commit()
+                    filename = os.path.basename(video.thumbnail_path)
+                    return f"/thumbnails/{filename}"
+        except Exception:
+            # If generation fails (no ffmpeg/codec issues), just return None.
+            pass
         return None
 
     @staticmethod
