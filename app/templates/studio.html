@@ -1,0 +1,610 @@
+{% extends "base.html" %}
+{% block title %}Творческая студия — ZTUBE{% endblock %}
+{% block content %}
+<div class="container" style="padding-top:2rem;">
+    <div class="studio-header" style="margin-bottom:2rem;">
+        <h1 style="font-size:2rem;font-weight:700;margin-bottom:0.5rem;">Творческая студия</h1>
+        <p style="color:var(--text-dim);">Управляйте своим каналом и анализируйте статистику</p>
+    </div>
+
+    <div class="studio-tabs" style="display:flex;gap:1rem;margin-bottom:2rem;border-bottom:2px solid var(--border);">
+        <div class="studio-tab active" data-tab="dashboard" onclick="switchStudioTab('dashboard', this)">
+            <i class="fas fa-chart-line"></i> Статистика
+        </div>
+        <div class="studio-tab" data-tab="videos" onclick="switchStudioTab('videos', this)">
+            <i class="fas fa-video"></i> Видео
+        </div>
+        <div class="studio-tab" data-tab="settings" onclick="switchStudioTab('settings', this)">
+            <i class="fas fa-cog"></i> Настройки канала
+        </div>
+    </div>
+
+    <!-- Dashboard Tab -->
+    <div class="studio-tab-content active" id="tab-dashboard">
+        <div class="studio-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.5rem;margin-bottom:2rem;">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-video"></i></div>
+                <div class="stat-value" id="totalVideos">0</div>
+                <div class="stat-label">Видео</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-eye"></i></div>
+                <div class="stat-value" id="totalViews">0</div>
+                <div class="stat-label">Просмотров</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-thumbs-up"></i></div>
+                <div class="stat-value" id="totalLikes">0</div>
+                <div class="stat-label">Лайков</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <div class="stat-value" id="totalSubscribers">0</div>
+                <div class="stat-label">Подписчиков</div>
+            </div>
+        </div>
+
+        <div class="studio-chart-section" style="background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin-bottom:2rem;">
+            <h3 style="margin-bottom:1rem;font-size:1.2rem;font-weight:600;">Просмотры за последние 30 дней</h3>
+            <canvas id="viewsChart" style="max-height:300px;"></canvas>
+        </div>
+
+        <div class="studio-top-videos">
+            <h3 style="margin-bottom:1rem;font-size:1.2rem;font-weight:600;">Топ-3 видео</h3>
+            <div id="topVideosList" class="top-videos-list"></div>
+        </div>
+    </div>
+
+    <!-- Videos Tab -->
+    <div class="studio-tab-content" id="tab-videos">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+            <h3 style="font-size:1.2rem;font-weight:600;">Управление видео</h3>
+            <button class="btn btn-primary" onclick="showUploadModal()">
+                <i class="fas fa-upload"></i> Загрузить видео
+            </button>
+        </div>
+        <div id="studioVideosList" class="studio-videos-list"></div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div class="studio-tab-content" id="tab-settings">
+        <h3 style="margin-bottom:1.5rem;font-size:1.2rem;font-weight:600;">Настройки канала</h3>
+
+        <div class="settings-section" style="background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:2rem;margin-bottom:2rem;">
+            <h4 style="margin-bottom:1rem;font-size:1.1rem;font-weight:600;">Аватар канала</h4>
+            <div style="display:flex;align-items:center;gap:2rem;">
+                <div id="currentAvatar" style="width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                    <i class="fas fa-user" style="font-size:3rem;color:rgba(255,255,255,0.3);"></i>
+                </div>
+                <div>
+                    <input type="file" id="avatarInput" accept="image/*" style="display:none;" onchange="uploadAvatar(this)">
+                    <button class="btn btn-outline" onclick="document.getElementById('avatarInput').click()">
+                        <i class="fas fa-upload"></i> Загрузить аватар
+                    </button>
+                    <p style="color:var(--text-dim);font-size:0.9rem;margin-top:0.5rem;">Рекомендуется 512x512px, JPG или PNG</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section" style="background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:2rem;">
+            <h4 style="margin-bottom:1rem;font-size:1.1rem;font-weight:600;">Баннер канала</h4>
+            <div style="display:flex;flex-direction:column;gap:1rem;">
+                <div id="currentBanner" style="width:100%;height:200px;border-radius:12px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                    <i class="fas fa-image" style="font-size:3rem;color:rgba(255,255,255,0.3);"></i>
+                </div>
+                <div>
+                    <input type="file" id="bannerInput" accept="image/*" style="display:none;" onchange="uploadBanner(this)">
+                    <button class="btn btn-outline" onclick="document.getElementById('bannerInput').click()">
+                        <i class="fas fa-upload"></i> Загрузить баннер
+                    </button>
+                    <p style="color:var(--text-dim);font-size:0.9rem;margin-top:0.5rem;">Рекомендуется 1920x480px, JPG или PNG</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let viewsChartInstance = null;
+let trafficChartInstance = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Подождать пока app.js проверит авторизацию
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Использовать currentUserData из app.js
+    if (!currentUserData) {
+        window.location.href = '/';
+        return;
+    }
+
+    // Загрузить дашборд и сохранить ID канала
+    await loadDashboard();
+});
+
+function switchStudioTab(tabId, el) {
+    document.querySelectorAll('.studio-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.studio-tab-content').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-' + tabId).classList.add('active');
+
+    if (tabId === 'dashboard') loadDashboard();
+    else if (tabId === 'videos') loadStudioVideos();
+    else if (tabId === 'settings') loadSettings();
+}
+
+async function loadDashboard() {
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/studio/dashboard', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!r.ok) {
+            if (r.status === 404) {
+                showNotification('Создайте канал сначала', 'error');
+                setTimeout(() => window.location.href = '/', 2000);
+            }
+            return;
+        }
+        const data = await r.json();
+
+        // Сохранить ID канала глобально для всех вкладок
+        window.currentChannelId = data.channel.id;
+
+        document.getElementById('totalVideos').textContent = data.stats.total_videos;
+        document.getElementById('totalViews').textContent = data.stats.total_views.toLocaleString();
+        document.getElementById('totalLikes').textContent = data.stats.total_likes.toLocaleString();
+        document.getElementById('totalSubscribers').textContent = data.stats.total_subscribers.toLocaleString();
+
+        renderViewsChart(data.views_chart);
+        renderTopVideos(data.top_videos);
+    } catch (e) {
+        showNotification('Ошибка загрузки данных', 'error');
+    }
+}
+
+function renderViewsChart(viewsData) {
+    const ctx = document.getElementById('viewsChart');
+    if (viewsChartInstance) viewsChartInstance.destroy();
+
+    viewsChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: viewsData.map(d => new Date(d.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })),
+            datasets: [{
+                label: 'Просмотры',
+                data: viewsData.map(d => d.views),
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { beginAtZero: true, ticks: { color: '#a0aec0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                x: { ticks: { color: '#a0aec0' }, grid: { display: false } }
+            }
+        }
+    });
+}
+
+function renderTopVideos(videos) {
+    const list = document.getElementById('topVideosList');
+    if (videos.length === 0) {
+        list.innerHTML = '<div class="empty-state"><p>Нет видео</p></div>';
+        return;
+    }
+    list.innerHTML = videos.map((v, i) => `
+        <div class="top-video-item" onclick="window.location.href='/video/${v.id}'">
+            <div class="top-video-rank">#${i + 1}</div>
+            <div class="top-video-thumb">
+                ${v.thumbnail_url ? `<img src="${v.thumbnail_url}" alt="">` : '<i class="fas fa-video"></i>'}
+            </div>
+            <div class="top-video-info">
+                <div class="top-video-title">${escapeHtml(v.title)}</div>
+                <div class="top-video-stats">
+                    <span><i class="fas fa-eye"></i> ${v.views_count.toLocaleString()}</span>
+                    <span><i class="fas fa-thumbs-up"></i> ${v.likes_count.toLocaleString()}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadStudioVideos() {
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/studio/videos', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!r.ok) return;
+        const data = await r.json();
+        renderStudioVideos(data.videos);
+    } catch (e) {}
+}
+
+function renderStudioVideos(videos) {
+    const list = document.getElementById('studioVideosList');
+    if (videos.length === 0) {
+        list.innerHTML = '<div class="empty-state"><i class="fas fa-video"></i><h3>Нет видео</h3><p>Загрузите первое видео</p></div>';
+        return;
+    }
+    list.innerHTML = videos.map(v => `
+        <div class="studio-video-card">
+            <div class="studio-video-thumb">
+                ${v.thumbnail_url ? `<img src="${v.thumbnail_url}" alt="">` : '<i class="fas fa-video"></i>'}
+            </div>
+            <div class="studio-video-details">
+                <div class="studio-video-title">${escapeHtml(v.title)}</div>
+                <div class="studio-video-meta">
+                    <span>${v.views_count} просмотров</span>
+                    <span>${v.likes_count} лайков</span>
+                    <span>${v.comments_count} комментариев</span>
+                    <span>${new Date(v.created_at).toLocaleDateString('ru-RU')}</span>
+                </div>
+            </div>
+            <div class="studio-video-actions">
+                <button class="btn btn-outline btn-sm" onclick="window.location.href='/video/${v.id}'">
+                    <i class="fas fa-eye"></i> Смотреть
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="changeThumbnail(${v.id})">
+                    <i class="fas fa-image"></i> Превью
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="deleteVideo(${v.id})">
+                    <i class="fas fa-trash"></i> Удалить
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function changeThumbnail(videoId) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const token = localStorage.getItem('token');
+        const formData = new FormData();
+        formData.append('thumbnail', file);
+
+        try {
+            const r = await fetch(`/api/videos/${videoId}/thumbnail`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: formData
+            });
+
+            if (r.ok) {
+                showNotification('Превью обновлено!', 'success');
+                loadStudioVideos();
+            } else {
+                showNotification('Ошибка обновления превью', 'error');
+            }
+        } catch (e) {
+            showNotification('Ошибка обновления превью', 'error');
+        }
+    };
+    input.click();
+}
+
+async function deleteVideo(videoId) {
+    if (!confirm('Вы уверены что хотите удалить это видео?')) return;
+
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch(`/api/videos/${videoId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        if (r.ok) {
+            showNotification('Видео удалено!', 'success');
+            loadStudioVideos();
+        } else {
+            showNotification('Ошибка удаления видео', 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка удаления видео', 'error');
+    }
+}
+
+async function loadSettings() {
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/studio/dashboard', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!r.ok) return;
+        const data = await r.json();
+
+        // Сохранить ID канала для загрузки баннера (если ещё не сохранён)
+        if (!window.currentChannelId) {
+            window.currentChannelId = data.channel.id;
+        }
+
+        // Показать текущий аватар (обновить из currentUserData)
+        const avatarDiv = document.getElementById('currentAvatar');
+        if (currentUserData && currentUserData.avatar_url) {
+            avatarDiv.innerHTML = `<img src="${currentUserData.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+        } else {
+            avatarDiv.innerHTML = '<i class="fas fa-user" style="font-size:3rem;color:rgba(255,255,255,0.3);"></i>';
+        }
+
+        // Показать текущий баннер
+        const bannerDiv = document.getElementById('currentBanner');
+        if (data.channel.banner_url) {
+            bannerDiv.innerHTML = `<img src="${data.channel.banner_url}" style="width:100%;height:100%;object-fit:cover;">`;
+        } else {
+            bannerDiv.innerHTML = '<i class="fas fa-image" style="font-size:3rem;color:rgba(255,255,255,0.3);"></i>';
+        }
+    } catch (e) {}
+}
+
+async function uploadAvatar(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const r = await fetch('/api/users/avatar', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+            body: formData
+        });
+
+        if (r.ok) {
+            const data = await r.json();
+            document.getElementById('currentAvatar').innerHTML = `<img src="${data.avatar_url}" style="width:100%;height:100%;object-fit:cover;">`;
+            showNotification('Аватар обновлён!', 'success');
+            currentUserData.avatar_url = data.avatar_url;
+        } else {
+            showNotification('Ошибка загрузки аватара', 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка загрузки аватара', 'error');
+    }
+}
+
+async function uploadBanner(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (!window.currentChannelId) {
+        showNotification('Ошибка: ID канала не найден', 'error');
+        return;
+    }
+
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const r = await fetch(`/api/channels/${window.currentChannelId}/banner`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+            body: formData
+        });
+
+        if (r.ok) {
+            const data = await r.json();
+            document.getElementById('currentBanner').innerHTML = `<img src="${data.banner_url}" style="width:100%;height:100%;object-fit:cover;">`;
+            showNotification('Баннер обновлён!', 'success');
+        } else {
+            showNotification('Ошибка загрузки баннера', 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка загрузки баннера', 'error');
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+
+<style>
+.studio-tab {
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.studio-tab:hover {
+    color: var(--text);
+}
+
+.studio-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+.studio-tab-content {
+    display: none;
+}
+
+.studio-tab-content.active {
+    display: block;
+}
+
+.stat-card {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.stat-icon {
+    font-size: 2rem;
+    color: var(--primary);
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+}
+
+.top-videos-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.top-video-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.top-video-item:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary);
+}
+
+.top-video-rank {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary);
+    min-width: 40px;
+}
+
+.top-video-thumb {
+    width: 120px;
+    height: 68px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.top-video-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.top-video-info {
+    flex: 1;
+}
+
+.top-video-title {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+}
+
+.top-video-stats {
+    display: flex;
+    gap: 1rem;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+}
+
+.studio-videos-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.studio-video-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.studio-video-thumb {
+    width: 160px;
+    height: 90px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.studio-video-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.studio-video-details {
+    flex: 1;
+}
+
+.studio-video-title {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+}
+
+.studio-video-meta {
+    display: flex;
+    gap: 1rem;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+.engagement-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.engagement-card {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.engagement-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 0.5rem;
+}
+
+.engagement-label {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+}
+</style>
+{% endblock %}

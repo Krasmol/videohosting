@@ -46,6 +46,15 @@ def upload_video():
 
     try:
         video = video_service.upload_video(channel, file, metadata, thumbnail_file)
+
+        # Запустить простое фоновое транскодирование в WebM
+        try:
+            from app.services.simple_transcoding import SimpleTranscodingService
+            SimpleTranscodingService.transcode_to_webm(video.id)
+        except Exception as e:
+            import logging
+            logging.warning(f'Failed to start transcoding: {str(e)}')
+
         return jsonify(video_service.to_dict(video)), 201
     except ValueError as e:
         return jsonify({'error': {'code': 'UNPROCESSABLE_ENTITY', 'message': str(e)}}), 422
@@ -95,6 +104,64 @@ def delete_video(video_id):
         return jsonify({'message': 'Video deleted successfully'}), 200
     except ValueError as e:
         return jsonify({'error': {'code': 'NOT_FOUND', 'message': str(e)}}), 404
+
+
+@videos_bp.route('/<int:video_id>/thumbnail', methods=['POST'])
+@require_auth
+def change_thumbnail(video_id):
+    user = request.current_user
+    video = video_service.get_video(video_id)
+
+    if not video:
+        return jsonify({'error': {'code': 'NOT_FOUND', 'message': f'Video with id {video_id} not found'}}), 404
+
+    if video.channel.author_id != user.id:
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': 'No permission'}}), 403
+
+    if 'thumbnail' not in request.files:
+        return jsonify({'error': {'code': 'BAD_REQUEST', 'message': 'Thumbnail file required'}}), 400
+
+    file = request.files['thumbnail']
+
+    if file.filename == '':
+        return jsonify({'error': {'code': 'BAD_REQUEST', 'message': 'No file selected'}}), 400
+
+    try:
+        import uuid
+        from flask import current_app
+        import os
+
+        # Проверить формат файла
+        allowed_extensions = {'jpg', 'jpeg', 'png', 'webp'}
+        ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        if ext not in allowed_extensions:
+            return jsonify({'error': {'code': 'BAD_REQUEST', 'message': 'Invalid format. Use jpg, png, or webp'}}), 400
+
+        # Сохранить новое превью
+        thumb_filename = f"{uuid.uuid4().hex}.{ext}"
+        thumb_folder = current_app.config['THUMBNAIL_FOLDER']
+        os.makedirs(thumb_folder, exist_ok=True)
+        thumbnail_path = os.path.join(thumb_folder, thumb_filename)
+        file.save(thumbnail_path)
+
+        # Удалить старое превью если есть
+        if video.thumbnail_path and os.path.exists(video.thumbnail_path):
+            try:
+                os.remove(video.thumbnail_path)
+            except:
+                pass
+
+        # Обновить путь в базе
+        video.thumbnail_path = thumbnail_path
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Thumbnail updated successfully',
+            'thumbnail_url': f"/thumbnails/{thumb_filename}"
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': {'code': 'INTERNAL_ERROR', 'message': f'Failed to update thumbnail: {str(e)}'}}), 500
 
 
 MODERATION_REASON_CODES = {

@@ -24,6 +24,12 @@
         <div class="channel-tab" data-tab="settings" onclick="switchTab('settings',this)" id="settingsTab" style="display:none;">Настройки</div>
     </div>
     <div class="channel-tab-content active" id="tab-videos">
+        <div id="moderatorControls" style="display:none;margin-bottom:1rem;padding:1rem;background:var(--glass);border:1px solid var(--border);border-radius:12px;">
+            <label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer;">
+                <input type="checkbox" id="showRemovedCheckbox" onchange="loadChannelData()" style="width:20px;height:20px;accent-color:#667eea;">
+                <span style="color:var(--text);font-weight:500;">Показать удалённые видео</span>
+            </label>
+        </div>
         <div class="video-grid" id="channelVideos">
             <div class="loading"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>
         </div>
@@ -119,12 +125,22 @@ async function loadChannelData() {
         document.getElementById('subscriberCount').textContent = channelData.subscriber_count + ' подписчиков';
         document.getElementById('aboutDescription').textContent = channelData.description || 'Нет описания';
 
+        // Отобразить баннер канала если есть
+        if (channelData.banner_url) {
+            document.getElementById('channelBanner').innerHTML = `<img src="${channelData.banner_url}" style="width:100%;height:100%;object-fit:cover;">`;
+        }
+
         if (isOwner) {
             document.getElementById('channelHandle').textContent = currentUser.tag;
             document.getElementById('settingsTab').style.display = 'block';
             document.getElementById('channelActions').innerHTML = '<button class="btn btn-primary" onclick="showUploadModal()"><i class="fas fa-upload"></i> Загрузить</button>';
+            document.getElementById('moderatorControls').style.display = 'block';
             fillSettings();
         } else if (currentUser) {
+            // Показываем контролы модератора если это модератор/админ
+            if (currentUser.is_moderator || currentUser.is_admin) {
+                document.getElementById('moderatorControls').style.display = 'block';
+            }
             await checkSubscription();
             renderSubButtons();
         }
@@ -134,9 +150,18 @@ async function loadChannelData() {
             const owner = await ur.json();
             if (!isOwner) document.getElementById('channelHandle').textContent = owner.tag;
             document.getElementById('channelDate').textContent = 'С ' + new Date(owner.created_at).toLocaleDateString('ru-RU');
+
+            // Отобразить аватарку владельца канала если есть
+            if (owner.avatar_url) {
+                document.getElementById('channelAvatar').innerHTML = `<img src="${owner.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+            }
         }
 
-        const vr = await fetch('/api/channels/' + channelId + '/videos');
+        const showRemoved = document.getElementById('showRemovedCheckbox')?.checked || false;
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+
+        const vr = await fetch('/api/channels/' + channelId + '/videos?show_removed=' + showRemoved, { headers });
         if (vr.ok) {
             const d = await vr.json();
             const videos = d.videos || d;
@@ -282,15 +307,17 @@ function displayVideos(videos) {
     c.innerHTML = videos.map(v => {
         const dur = formatDuration(v.duration);
         const cats = {gaming:'Игры',music:'Музыка',education:'Образование',entertainment:'Развлечения',tech:'Технологии',sports:'Спорт',news:'Новости',blog:'Блог',other:'Другое'};
-        return '<div class="video-card" onclick="window.location.href=\'/video/' + v.id + '\'">' +
+        const isRemoved = v.status === 'removed';
+        return '<div class="video-card' + (isRemoved ? ' video-removed' : '') + '" onclick="window.location.href=\'/video/' + v.id + '\'">' +
             '<div class="video-thumbnail">' +
-            (v.thumbnail_url ? '<img src="' + v.thumbnail_url + '" alt="">' : '<i class="fas fa-play-circle" style="color:rgba(255,255,255,0.3);font-size:3rem;"></i>') +
+            (v.thumbnail_url ? '<img src="' + v.thumbnail_url + '" alt=""' + (isRemoved ? ' style="opacity:0.5;filter:grayscale(1);"' : '') + '>' : '<i class="fas fa-play-circle" style="color:rgba(255,255,255,0.3);font-size:3rem;"></i>') +
             '<div class="play-overlay"><i class="fas fa-play" style="color:white;font-size:1.5rem;margin-left:4px;"></i></div>' +
             '<span class="duration-badge">' + dur + '</span>' +
-            (v.access_level !== 'public' ? '<span class="video-badge">' + (v.access_level === 'sponsor' ? '💎' : '🔒') + '</span>' : '') +
+            (isRemoved ? '<span class="video-badge" style="background:rgba(245,87,108,0.9);"><i class="fas fa-ban"></i></span>' : '') +
+            (v.access_level !== 'public' && !isRemoved ? '<span class="video-badge">' + (v.access_level === 'sponsor' ? '💎' : '🔒') + '</span>' : '') +
             '</div>' +
             '<div class="video-info">' +
-            '<h3 class="video-title">' + escapeHtml(v.title) + '</h3>' +
+            '<h3 class="video-title">' + escapeHtml(v.title) + (isRemoved ? ' <span style="color:#f5576c;font-size:0.8rem;">[Удалено]</span>' : '') + '</h3>' +
             '<div class="video-meta">' +
             '<span>' + (v.views_count || 0) + ' <i class="fas fa-eye"></i></span>' +
             '<span>' + (v.likes_count || 0) + ' <i class="fas fa-thumbs-up"></i></span>' +

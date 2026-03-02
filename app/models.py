@@ -91,6 +91,16 @@ class Video(db.Model):
     dislikes_count = db.Column(db.Integer, default=0, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    # Transcoding fields
+    original_file_path = db.Column(db.String(500), nullable=True)
+    transcoded_360p_webm = db.Column(db.String(500), nullable=True)
+    transcoded_480p_webm = db.Column(db.String(500), nullable=True)
+    transcoded_720p_webm = db.Column(db.String(500), nullable=True)
+    transcoded_480p_mp4 = db.Column(db.String(500), nullable=True)  # fallback для Safari
+    transcoding_status = db.Column(db.String(20), default='pending', nullable=False)
+    transcoding_progress = db.Column(db.Integer, default=0, nullable=False)
+    transcoding_error = db.Column(db.Text, nullable=True)
+
     rooms = db.relationship('Room', backref='video', cascade='all, delete-orphan')
     reactions = db.relationship('VideoReaction', backref='video', cascade='all, delete-orphan')
     reports = db.relationship('VideoReport', backref='video', cascade='all, delete-orphan')
@@ -281,3 +291,36 @@ class Notification(db.Model):
 
     def __repr__(self):
         return f'<Notification {self.id} type={self.type}>'
+
+
+class VideoView(db.Model):
+    """Отслеживание просмотров видео с источниками трафика"""
+    __tablename__ = 'video_views'
+
+    id = db.Column(db.Integer, primary_key=True)
+    video_id = db.Column(db.Integer, db.ForeignKey('videos.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    source = db.Column(db.String(50), nullable=False)  # 'direct', 'search', 'recommended', 'channel'
+    viewed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    watch_duration = db.Column(db.Integer, nullable=True)  # секунды просмотра
+
+    def __repr__(self):
+        return f'<VideoView video_id={self.video_id} source={self.source}>'
+
+
+class DailyVideoStats(db.Model):
+    """Агрегированная статистика по видео за день"""
+    __tablename__ = 'daily_video_stats'
+
+    id = db.Column(db.Integer, primary_key=True)
+    video_id = db.Column(db.Integer, db.ForeignKey('videos.id'), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    views = db.Column(db.Integer, default=0, nullable=False)
+    likes = db.Column(db.Integer, default=0, nullable=False)
+    comments = db.Column(db.Integer, default=0, nullable=False)
+    watch_time = db.Column(db.Integer, default=0, nullable=False)  # общее время просмотра в секундах
+
+    __table_args__ = (db.UniqueConstraint('video_id', 'date', name='unique_video_date'),)
+
+    def __repr__(self):
+        return f'<DailyVideoStats video_id={self.video_id} date={self.date}>'

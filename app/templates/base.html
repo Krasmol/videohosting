@@ -43,6 +43,7 @@
                     </div>
                     <div class="user-dropdown" id="userDropdown">
                         <a href="#" onclick="showMyChannel()"><i class="fas fa-tv"></i> Мой канал</a>
+                        <a href="/studio" id="studioLink" style="display:none;"><i class="fas fa-chart-line"></i> Творческая студия</a>
                         <a href="#" onclick="showSubscriptions()"><i class="fas fa-heart"></i> Подписки</a>
                         <a href="/messages"><i class="fas fa-envelope"></i> Сообщения</a>
                         <a href="#" id="adminLink" style="display:none;" onclick="window.location.href='/admin'"><i class="fas fa-shield-alt"></i> Админ-панель</a>
@@ -227,6 +228,25 @@
     </div>
 
     <div id="notificationContainer" class="notification-container"></div>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>О платформе</h4>
+                <a href="/about">О проекте</a>
+                <a href="/faq">Часто задаваемые вопросы</a>
+            </div>
+            <div class="footer-section">
+                <h4>Юридическая информация</h4>
+                <a href="/privacy">Политика конфиденциальности</a>
+                <a href="/terms">Пользовательское соглашение</a>
+                <a href="/community-guidelines">Правила сообщества</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; {{ current_year }} ZTUBE. Все права защищены.</p>
+        </div>
+    </footer>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

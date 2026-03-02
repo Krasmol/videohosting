@@ -138,6 +138,9 @@ def register_blueprints(app):
     from app.api.notifications import notifications_bp
     from app.api.messages import messages_bp
     from app.api.reactions import reactions_bp
+    from app.api.users import users_bp
+    from app.api.studio import studio_bp
+    from app.legal import legal_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -149,6 +152,9 @@ def register_blueprints(app):
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     app.register_blueprint(messages_bp, url_prefix='/api/messages')
     app.register_blueprint(reactions_bp, url_prefix='/api')
+    app.register_blueprint(users_bp, url_prefix='/api/users')
+    app.register_blueprint(studio_bp, url_prefix='/api/studio')
+    app.register_blueprint(legal_bp)
 
     app.logger.info('Blueprints registered')
 

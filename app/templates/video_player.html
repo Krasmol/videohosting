@@ -7,6 +7,17 @@
             <video id="videoPlayer" controls autoplay playsinline>
                 <source id="videoSource" src="" type="video/mp4">
             </video>
+            <div class="quality-selector" id="qualitySelector" style="display:none;">
+                <button class="quality-btn" onclick="toggleQualityMenu()">
+                    <i class="fas fa-cog"></i> <span id="currentQuality">480p</span>
+                </button>
+                <div class="quality-menu" id="qualityMenu" style="display:none;">
+                    <div class="quality-option" data-quality="360p" onclick="changeQuality('360p')">360p</div>
+                    <div class="quality-option" data-quality="480p" onclick="changeQuality('480p')">480p</div>
+                    <div class="quality-option" data-quality="720p" onclick="changeQuality('720p')">720p</div>
+                    <div class="quality-option" data-quality="original" onclick="changeQuality('original')">Оригінал</div>
+                </div>
+            </div>
         </div>
         <div class="video-details">
             <h1 id="videoTitle" class="video-title-large">Загрузка...</h1>
@@ -57,15 +68,21 @@
             </div>
 
             <div class="video-comments-box">
-                <h3>Комментарии</h3>
-                <div id="commentsForm" class="comment-form">
-                    <textarea id="commentInput" rows="3" maxlength="2000" placeholder="Напишите комментарий..."></textarea>
-                    <div class="comment-form-actions">
-                        <button class="btn btn-primary btn-sm" onclick="postComment()">Отправить</button>
+                <h3 style="margin-bottom:1.5rem;font-size:1.3rem;font-weight:700;">Комментарии</h3>
+                <div id="commentsForm" class="comment-form-modern">
+                    <div class="comment-form-header">
+                        <div class="user-avatar-small" id="commentUserAvatar">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <textarea id="commentInput" rows="1" maxlength="2000" placeholder="Добавьте комментарий..." onfocus="expandCommentForm()" oninput="autoResizeTextarea(this)"></textarea>
+                    </div>
+                    <div class="comment-form-actions" id="commentActions" style="display:none;">
+                        <button class="btn btn-ghost btn-sm" onclick="cancelComment()">Отмена</button>
+                        <button class="btn btn-primary btn-sm" onclick="postComment()">Комментировать</button>
                     </div>
                     <div id="commentError" class="error-message"></div>
                 </div>
-                <div id="commentsList" class="comments-list"></div>
+                <div id="commentsList" class="comments-list-modern"></div>
             </div>
         </div>
     </div>
@@ -229,17 +246,68 @@ async function loadComments() {
 function renderComment(c) {
     const canDelete = currentUser && (currentUser.is_admin || currentUser.is_moderator || (c.user && c.user.id === currentUser.id) || (c.user_id && c.user_id === currentUser.id));
     const author = c.user ? (c.user.display_name || c.user.username) : (c.user_display || 'Пользователь');
-    const created = c.created_at ? new Date(c.created_at).toLocaleString('ru-RU') : '';
+    const avatarUrl = c.user?.avatar_url || null;
+    const created = c.created_at ? timeAgo(c.created_at) : '';
     return `
         <div class="comment-item">
-            <div class="comment-meta">
-                <span class="comment-author">${escapeHtml(author)}</span>
-                <span class="comment-date">${escapeHtml(created)}</span>
-                ${canDelete ? `<button class="btn btn-outline btn-xs" onclick="deleteComment(${c.id})"><i class=\"fas fa-trash\"></i></button>` : ''}
+            <div class="comment-avatar">
+                ${avatarUrl ?
+                    `<img src="${avatarUrl}" alt="">` :
+                    '<i class="fas fa-user-circle" style="font-size:2rem;color:var(--primary);"></i>'
+                }
             </div>
-            <div class="comment-text">${escapeHtml(c.content)}</div>
+            <div class="comment-content">
+                <div>
+                    <span class="comment-author">${escapeHtml(author)}</span>
+                    <span class="comment-date">${created}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(c.content)}</div>
+                ${canDelete ? `
+                    <div class="comment-actions">
+                        <button class="comment-action-btn delete" onclick="deleteComment(${c.id})">
+                            <i class="fas fa-trash"></i> Удалить
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
         </div>
     `;
+}
+
+function timeAgo(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+
+    if (seconds < 60) return 'только что';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} мин назад`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} ч назад`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} д назад`;
+    return date.toLocaleDateString('ru-RU');
+}
+
+function expandCommentForm() {
+    const actions = document.getElementById('commentActions');
+    const input = document.getElementById('commentInput');
+    actions.style.display = 'flex';
+    input.rows = 3;
+}
+
+function cancelComment() {
+    const input = document.getElementById('commentInput');
+    const actions = document.getElementById('commentActions');
+    input.value = '';
+    input.rows = 1;
+    input.blur();
+    actions.style.display = 'none';
+}
+
+function autoResizeTextarea(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
 }
 
 async function postComment() {
@@ -258,6 +326,7 @@ async function postComment() {
         });
         if (r.ok) {
             input.value = '';
+            cancelComment();
             await loadComments();
             showNotification('Комментарий добавлен', 'success');
         } else {

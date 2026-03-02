@@ -354,16 +354,6 @@ def handle_chat_message(data):
             emit('error', {'message': 'Room not found'})
             return
 
-        # ✅ ВАЖНО: пользователь должен быть участником комнаты
-        participant = RoomParticipant.query.filter_by(
-            room_id=room_id,
-            user_id=user.id
-        ).first()
-        if not participant:
-            emit('error', {'message': 'You are not a participant of this room'})
-            kick_user_from_room(room_id, user.id, reason='not_participant')
-            return
-
         if not message:
             emit('error', {'message': 'Message cannot be empty'})
             return

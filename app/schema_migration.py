@@ -57,4 +57,22 @@ def ensure_sqlite_schema(app) -> None:
         if "thumbnail_path" not in cols:
             _add_column("videos", "ADD COLUMN thumbnail_path VARCHAR(500)")
 
+        # Transcoding fields
+        if "original_file_path" not in cols:
+            _add_column("videos", "ADD COLUMN original_file_path VARCHAR(500)")
+        if "transcoded_360p_webm" not in cols:
+            _add_column("videos", "ADD COLUMN transcoded_360p_webm VARCHAR(500)")
+        if "transcoded_480p_webm" not in cols:
+            _add_column("videos", "ADD COLUMN transcoded_480p_webm VARCHAR(500)")
+        if "transcoded_720p_webm" not in cols:
+            _add_column("videos", "ADD COLUMN transcoded_720p_webm VARCHAR(500)")
+        if "transcoded_480p_mp4" not in cols:
+            _add_column("videos", "ADD COLUMN transcoded_480p_mp4 VARCHAR(500)")
+        if "transcoding_status" not in cols:
+            _add_column("videos", "ADD COLUMN transcoding_status VARCHAR(20) NOT NULL DEFAULT 'pending'")
+        if "transcoding_progress" not in cols:
+            _add_column("videos", "ADD COLUMN transcoding_progress INTEGER NOT NULL DEFAULT 0")
+        if "transcoding_error" not in cols:
+            _add_column("videos", "ADD COLUMN transcoding_error TEXT")
+
     db.session.commit()

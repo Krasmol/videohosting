@@ -4,6 +4,7 @@ let currentUserData = null;
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth();
     setupCharCounters();
+    setupSearch();
 });
 
 async function checkAuth() {
@@ -44,6 +45,10 @@ function showUserMenu(user) {
     if (user.is_admin) {
         const adminLink = document.getElementById('adminLink');
         if (adminLink) adminLink.style.display = 'flex';
+    }
+    if (user.is_author) {
+        const studioLink = document.getElementById('studioLink');
+        if (studioLink) studioLink.style.display = 'flex';
     }
     loadUnreadNotifCount();
 }
@@ -573,3 +578,29 @@ document.querySelectorAll('.modal').forEach(modal => {
         if (event.target === modal) modal.classList.remove('show');
     });
 });
+
+// Поиск видео
+function setupSearch() {
+    const searchInput = document.getElementById('searchInput');
+    const searchButton = searchInput?.nextElementSibling;
+
+    if (searchInput) {
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+    }
+
+    if (searchButton) {
+        searchButton.addEventListener('click', performSearch);
+    }
+}
+
+function performSearch() {
+    const searchInput = document.getElementById('searchInput');
+    const query = searchInput?.value.trim();
+    if (query) {
+        window.location.href = `/search?q=${encodeURIComponent(query)}`;
+    }
+}

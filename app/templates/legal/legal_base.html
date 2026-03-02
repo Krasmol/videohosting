@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - ZTUBE{% endblock %}
+
+{% block content %}
+<div class="legal-container">
+    <div class="legal-content">
+        <h1 class="legal-title">{{ page_title }}</h1>
+        <div class="legal-body">
+            {% block legal_content %}{% endblock %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.legal-container {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.legal-content {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 50px 60px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.legal-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 40px;
+    color: #fff;
+    text-align: center;
+}
+
+.legal-body {
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.8;
+    font-size: 1rem;
+    max-width: 680px;
+    margin: 0 auto;
+}
+
+.legal-body h2 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-top: 50px;
+    margin-bottom: 20px;
+    color: #fff;
+}
+
+.legal-body h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-top: 35px;
+    margin-bottom: 15px;
+    color: #fff;
+}
+
+.legal-body p {
+    margin-bottom: 20px;
+    text-align: justify;
+}
+
+.legal-body ul, .legal-body ol {
+    margin-left: 30px;
+    margin-bottom: 25px;
+}
+
+.legal-body li {
+    margin-bottom: 12px;
+}
+
+.legal-body strong {
+    color: #fff;
+    font-weight: 600;
+}
+
+.legal-body a {
+    color: #4a9eff;
+    text-decoration: none;
+}
+
+.legal-body a:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    .legal-content {
+        padding: 30px 25px;
+    }
+
+    .legal-title {
+        font-size: 2rem;
+    }
+
+    .legal-body {
+        max-width: 100%;
+    }
+
+    .legal-body h2 {
+        font-size: 1.4rem;
+    }
+}
+</style>
+{% endblock %}
