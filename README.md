@@ -142,11 +142,11 @@ API endpoints will be documented as they are implemented in subsequent tasks.
 ## Development Roadmap
 
 - [x] Task 1: Project Setup and Core Infrastructure
-- [ ] Task 2: Database Models and Migrations
-- [ ] Task 3: Authentication and User Management
-- [ ] Task 4: Channel Management
-- [ ] Task 5: Video Management Core
-- [ ] Task 6-24: Additional features (see tasks.md)
+- [x] Task 2: Database Models and Migrations
+- [x] Task 3: Authentication and User Management
+- [x] Task 4: Channel Management
+- [x] Task 5: Video Management Core
+- [x] Task 6-24: Additional features (see tasks.md)
 
 ## License
 
@@ -155,3 +155,4 @@ API endpoints will be documented as they are implemented in subsequent tasks.
 ## Contributing
 
 [Contributing guidelines to be added]
+
