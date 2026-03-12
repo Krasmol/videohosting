@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/modern.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
     <nav class="navbar">
@@ -65,14 +66,6 @@
     <main class="main-content">
         {% block content %}{% endblock %}
     </main>
-
-    <footer class="site-footer">
-        <div class="container footer-inner">
-            <div class="footer-left">
-                <span class="footer-copy">© {{ current_year }} ZTUBE</span>
-            </div>
-        </div>
-    </footer>
 
     <div id="loginModal" class="modal">
         <div class="modal-content">
@@ -229,22 +222,29 @@
 
     <div id="notificationContainer" class="notification-container"></div>
 
+    <!-- Cookie/Privacy Banner -->
+    <div id="privacyBanner" class="privacy-banner" style="display: none;">
+        <div class="privacy-banner-content">
+            <div class="privacy-banner-text">
+                <i class="fas fa-shield-alt"></i>
+                <span>Мы используем cookies для улучшения работы сайта. Продолжая использовать ZTUBE, вы соглашаетесь с нашей
+                    <a href="/privacy">Политикой конфиденциальности</a>,
+                    <a href="/terms">Пользовательским соглашением</a> и
+                    <a href="/community-guidelines">Правилами сообщества</a>.
+                </span>
+            </div>
+            <button class="privacy-banner-btn" onclick="acceptPrivacy()">Принять</button>
+        </div>
+    </div>
+
     <footer class="site-footer">
         <div class="footer-content">
-            <div class="footer-section">
-                <h4>О платформе</h4>
-                <a href="/about">О проекте</a>
-                <a href="/faq">Часто задаваемые вопросы</a>
-            </div>
-            <div class="footer-section">
-                <h4>Юридическая информация</h4>
-                <a href="/privacy">Политика конфиденциальности</a>
-                <a href="/terms">Пользовательское соглашение</a>
-                <a href="/community-guidelines">Правила сообщества</a>
-            </div>
-        </div>
-        <div class="footer-bottom">
-            <p>&copy; {{ current_year }} ZTUBE. Все права защищены.</p>
+            <a href="/about">О проекте</a> •
+            <a href="/faq">FAQ</a> •
+            <a href="/privacy">Конфиденциальность</a> •
+            <a href="/terms">Соглашение</a> •
+            <a href="/community-guidelines">Правила</a>
+            <span class="footer-copy">&copy; {{ current_year }} ZTUBE</span>
         </div>
     </footer>
 

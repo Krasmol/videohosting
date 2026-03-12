@@ -98,7 +98,11 @@ def initialize_extensions(app):
         app,
         message_queue=mq,
         async_mode=app.config['SOCKETIO_ASYNC_MODE'],
-        cors_allowed_origins=app.config['CORS_ORIGINS']
+        cors_allowed_origins=app.config.get('SOCKETIO_CORS_ALLOWED_ORIGINS', '*'),
+        engineio_logger=False,
+        logger=False,
+        ping_timeout=60,
+        ping_interval=25
     )
 
     CORS(app, origins=app.config['CORS_ORIGINS'])

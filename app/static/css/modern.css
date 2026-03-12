@@ -25,6 +25,7 @@ body {
     color: var(--text);
     line-height: 1.6;
     overflow-x: hidden;
+    padding-bottom: 80px;
 }
 
 body::before {
@@ -1311,71 +1312,135 @@ body::before {
 
 /* Footer Styles */
 .site-footer {
-    background: rgba(10, 14, 39, 0.95);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(10, 14, 39, 0.98);
     backdrop-filter: blur(20px);
     border-top: 1px solid var(--border);
-    margin-top: 80px;
-    padding: 40px 0 20px;
+    z-index: 1000;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2);
 }
 
 .footer-content {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 20px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 40px;
-    margin-bottom: 30px;
+    text-align: center;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    color: var(--text-dim);
 }
 
-.footer-section h4 {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 15px;
-    color: #fff;
-}
-
-.footer-section a {
-    display: block;
+.footer-content a {
     color: var(--text-dim);
     text-decoration: none;
-    font-size: 0.9rem;
-    margin-bottom: 10px;
     transition: color 0.2s;
+    margin: 0 0.25rem;
 }
 
-.footer-section a:hover {
+.footer-content a:hover {
     color: #667eea;
 }
 
-.footer-bottom {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px 20px 0;
-    border-top: 1px solid var(--border);
-    text-align: center;
-}
-
-.footer-bottom p {
-    color: var(--text-dim);
-    font-size: 0.85rem;
+.footer-copy {
+    margin-left: 1rem;
+    opacity: 0.7;
 }
 
 @media (max-width: 768px) {
-    .footer-content {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 30px;
+    body {
+        padding-bottom: 70px;
     }
-    
-    .site-footer {
-        margin-top: 60px;
-        padding: 30px 0 15px;
+
+    .footer-content {
+        font-size: 0.75rem;
+        padding: 0.5rem;
+    }
+
+    .footer-copy {
+        display: block;
+        margin: 0.5rem 0 0 0;
     }
 }
 
-@media (max-width: 480px) {
-    .footer-content {
-        grid-template-columns: 1fr;
-        gap: 25px;
+/* Privacy Banner */
+.privacy-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(10, 14, 39, 0.98);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(102, 126, 234, 0.3);
+    padding: 20px;
+    z-index: 9999;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.privacy-banner-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.privacy-banner-text {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex: 1;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.privacy-banner-text i {
+    font-size: 1.5rem;
+    color: #667eea;
+    flex-shrink: 0;
+}
+
+.privacy-banner-text a {
+    color: #4a9eff;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.privacy-banner-text a:hover {
+    text-decoration: underline;
+}
+
+.privacy-banner-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.privacy-banner-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+@media (max-width: 768px) {
+    .privacy-banner-content {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .privacy-banner-text {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .privacy-banner-btn {
+        width: 100%;
     }
 }

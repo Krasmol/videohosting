@@ -77,7 +77,7 @@
                     <i class="fas fa-user" style="font-size:3rem;color:rgba(255,255,255,0.3);"></i>
                 </div>
                 <div>
-                    <input type="file" id="avatarInput" accept="image/*" style="display:none;" onchange="uploadAvatar(this)">
+                    <input type="file" id="avatarInput" accept="image/*" style="display:none;" onchange="showAvatarCropper(this)">
                     <button class="btn btn-outline" onclick="document.getElementById('avatarInput').click()">
                         <i class="fas fa-upload"></i> Загрузить аватар
                     </button>
@@ -93,7 +93,7 @@
                     <i class="fas fa-image" style="font-size:3rem;color:rgba(255,255,255,0.3);"></i>
                 </div>
                 <div>
-                    <input type="file" id="bannerInput" accept="image/*" style="display:none;" onchange="uploadBanner(this)">
+                    <input type="file" id="bannerInput" accept="image/*" style="display:none;" onchange="showBannerCropper(this)">
                     <button class="btn btn-outline" onclick="document.getElementById('bannerInput').click()">
                         <i class="fas fa-upload"></i> Загрузить баннер
                     </button>
@@ -104,6 +104,23 @@
     </div>
 </div>
 
+<!-- Image Cropper Modal -->
+<div id="cropperModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:800px;">
+        <span class="close" onclick="closeCropperModal()">&times;</span>
+        <h2 id="cropperTitle">Обрезать изображение</h2>
+        <div style="max-height:500px;overflow:hidden;background:#000;border-radius:12px;margin:1rem 0;">
+            <img id="cropperImage" style="max-width:100%;display:block;">
+        </div>
+        <div style="display:flex;gap:1rem;justify-content:center;margin-top:1rem;">
+            <button class="btn btn-outline" onclick="closeCropperModal()">Отмена</button>
+            <button class="btn btn-primary" onclick="cropAndUpload()">Применить и загрузить</button>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 let viewsChartInstance = null;
@@ -247,8 +264,8 @@ function renderStudioVideos(videos) {
                 </div>
             </div>
             <div class="studio-video-actions">
-                <button class="btn btn-outline btn-sm" onclick="window.location.href='/video/${v.id}'">
-                    <i class="fas fa-eye"></i> Смотреть
+                <button class="btn btn-outline btn-sm" onclick="editVideo(${v.id})">
+                    <i class="fas fa-edit"></i> Редактировать
                 </button>
                 <button class="btn btn-outline btn-sm" onclick="changeThumbnail(${v.id})">
                     <i class="fas fa-image"></i> Превью
@@ -274,7 +291,7 @@ async function changeThumbnail(videoId) {
         formData.append('thumbnail', file);
 
         try {
-            const r = await fetch(`/api/videos/${videoId}/thumbnail`, {
+            const r = await fetch(`/api/studio/videos/${videoId}/thumbnail`, {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + token },
                 body: formData
@@ -284,13 +301,133 @@ async function changeThumbnail(videoId) {
                 showNotification('Превью обновлено!', 'success');
                 loadStudioVideos();
             } else {
-                showNotification('Ошибка обновления превью', 'error');
+                const err = await r.json();
+                showNotification(err.error?.message || 'Ошибка обновления превью', 'error');
             }
         } catch (e) {
             showNotification('Ошибка обновления превью', 'error');
         }
     };
     input.click();
+}
+
+async function editVideo(videoId) {
+    console.log('editVideo called with ID:', videoId);
+    // Показать модальное окно редактирования
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch(`/api/videos/${videoId}`, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        console.log('Response status:', r.status);
+        if (!r.ok) {
+            console.error('Failed to fetch video data');
+            return;
+        }
+        const data = await r.json();
+        console.log('Video data:', data);
+
+        showEditVideoModal(data);
+    } catch (e) {
+        console.error('Error in editVideo:', e);
+        showNotification('Ошибка загрузки данных видео', 'error');
+    }
+}
+
+function showEditVideoModal(video) {
+    console.log('showEditVideoModal called with:', video);
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:600px;">
+            <div class="modal-header">
+                <h3>Редактировать видео</h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Название</label>
+                    <input type="text" id="editTitle" class="form-control" value="${escapeHtml(video.title)}" maxlength="100">
+                </div>
+                <div class="form-group">
+                    <label>Описание</label>
+                    <textarea id="editDescription" class="form-control" rows="4" maxlength="2000">${escapeHtml(video.description || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Категория</label>
+                    <select id="editCategory" class="form-control">
+                        <option value="gaming" ${video.category === 'gaming' ? 'selected' : ''}>Игры</option>
+                        <option value="music" ${video.category === 'music' ? 'selected' : ''}>Музыка</option>
+                        <option value="education" ${video.category === 'education' ? 'selected' : ''}>Образование</option>
+                        <option value="entertainment" ${video.category === 'entertainment' ? 'selected' : ''}>Развлечения</option>
+                        <option value="tech" ${video.category === 'tech' ? 'selected' : ''}>Технологии</option>
+                        <option value="sports" ${video.category === 'sports' ? 'selected' : ''}>Спорт</option>
+                        <option value="news" ${video.category === 'news' ? 'selected' : ''}>Новости</option>
+                        <option value="blog" ${video.category === 'blog' ? 'selected' : ''}>Блог</option>
+                        <option value="other" ${video.category === 'other' ? 'selected' : ''}>Другое</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Теги (через запятую)</label>
+                    <input type="text" id="editTags" class="form-control" value="${escapeHtml(video.tags || '')}" maxlength="500">
+                </div>
+                <div class="form-group">
+                    <label>Доступ</label>
+                    <select id="editAccessLevel" class="form-control">
+                        <option value="public" ${video.access_level === 'public' ? 'selected' : ''}>Публичное</option>
+                        <option value="subscriber" ${video.access_level === 'subscriber' ? 'selected' : ''}>Только подписчики</option>
+                        <option value="sponsor" ${video.access_level === 'sponsor' ? 'selected' : ''}>Только спонсоры</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
+                <button class="btn btn-primary" onclick="saveVideoEdit(${video.id})">Сохранить</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    console.log('Modal appended to body');
+}
+
+async function saveVideoEdit(videoId) {
+    const token = localStorage.getItem('token');
+    const data = {
+        title: document.getElementById('editTitle').value.trim(),
+        description: document.getElementById('editDescription').value.trim(),
+        category: document.getElementById('editCategory').value,
+        tags: document.getElementById('editTags').value.trim(),
+        access_level: document.getElementById('editAccessLevel').value
+    };
+
+    if (!data.title) {
+        showNotification('Название обязательно', 'error');
+        return;
+    }
+
+    try {
+        const r = await fetch(`/api/studio/videos/${videoId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (r.ok) {
+            showNotification('Видео обновлено!', 'success');
+            document.querySelector('.modal-overlay').remove();
+            loadStudioVideos();
+        } else {
+            const err = await r.json();
+            showNotification(err.error?.message || 'Ошибка обновления', 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка обновления видео', 'error');
+    }
 }
 
 async function deleteVideo(videoId) {
@@ -361,15 +498,166 @@ async function uploadAvatar(input) {
 
         if (r.ok) {
             const data = await r.json();
-            document.getElementById('currentAvatar').innerHTML = `<img src="${data.avatar_url}" style="width:100%;height:100%;object-fit:cover;">`;
+            document.getElementById('currentAvatar').innerHTML = `<img src="${data.avatar_url}?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
             showNotification('Аватар обновлён!', 'success');
             currentUserData.avatar_url = data.avatar_url;
+            // Перезагрузить страницу чтобы обновить аватар в меню
+            setTimeout(() => location.reload(), 1000);
         } else {
             showNotification('Ошибка загрузки аватара', 'error');
         }
     } catch (e) {
         showNotification('Ошибка загрузки аватара', 'error');
     }
+}
+
+let currentCropper = null;
+let currentCropType = null;
+let currentFile = null;
+
+function showAvatarCropper(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    currentFile = file;
+    currentCropType = 'avatar';
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = document.getElementById('cropperImage');
+        img.src = e.target.result;
+
+        document.getElementById('cropperTitle').textContent = 'Обрезать аватар';
+        document.getElementById('cropperModal').classList.add('show');
+
+        if (currentCropper) {
+            currentCropper.destroy();
+        }
+
+        currentCropper = new Cropper(img, {
+            aspectRatio: 1,
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.8,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+            minCropBoxWidth: 100,
+            minCropBoxHeight: 100,
+        });
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+
+function showBannerCropper(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    currentFile = file;
+    currentCropType = 'banner';
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = document.getElementById('cropperImage');
+        img.src = e.target.result;
+
+        document.getElementById('cropperTitle').textContent = 'Обрезать баннер';
+        document.getElementById('cropperModal').classList.add('show');
+
+        if (currentCropper) {
+            currentCropper.destroy();
+        }
+
+        currentCropper = new Cropper(img, {
+            aspectRatio: 4,
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.9,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+            minCropBoxWidth: 200,
+            minCropBoxHeight: 50,
+        });
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+
+function closeCropperModal() {
+    document.getElementById('cropperModal').classList.remove('show');
+    if (currentCropper) {
+        currentCropper.destroy();
+        currentCropper = null;
+    }
+    currentFile = null;
+    currentCropType = null;
+}
+
+async function cropAndUpload() {
+    if (!currentCropper || !currentCropType) return;
+
+    const canvas = currentCropper.getCroppedCanvas({
+        width: currentCropType === 'avatar' ? 512 : 1920,
+        height: currentCropType === 'avatar' ? 512 : 480,
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+    });
+
+    canvas.toBlob(async (blob) => {
+        const token = localStorage.getItem('token');
+        const formData = new FormData();
+        formData.append('file', blob, currentFile.name);
+
+        try {
+            let url, successMsg;
+            if (currentCropType === 'avatar') {
+                url = '/api/users/avatar';
+                successMsg = 'Аватар обновлён!';
+            } else {
+                if (!window.currentChannelId) {
+                    showNotification('Ошибка: ID канала не найден', 'error');
+                    return;
+                }
+                url = `/api/channels/${window.currentChannelId}/banner`;
+                successMsg = 'Баннер обновлён!';
+            }
+
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: formData
+            });
+
+            if (r.ok) {
+                const data = await r.json();
+
+                if (currentCropType === 'avatar') {
+                    document.getElementById('currentAvatar').innerHTML = `<img src="${data.avatar_url}?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+                    currentUserData.avatar_url = data.avatar_url;
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    document.getElementById('currentBanner').innerHTML = `<img src="${data.banner_url}?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover;">`;
+                }
+
+                showNotification(successMsg, 'success');
+                closeCropperModal();
+            } else {
+                showNotification('Ошибка загрузки', 'error');
+            }
+        } catch (e) {
+            showNotification('Ошибка загрузки', 'error');
+        }
+    }, 'image/jpeg', 0.9);
 }
 
 async function uploadBanner(input) {
@@ -394,7 +682,7 @@ async function uploadBanner(input) {
 
         if (r.ok) {
             const data = await r.json();
-            document.getElementById('currentBanner').innerHTML = `<img src="${data.banner_url}" style="width:100%;height:100%;object-fit:cover;">`;
+            document.getElementById('currentBanner').innerHTML = `<img src="${data.banner_url}?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover;">`;
             showNotification('Баннер обновлён!', 'success');
         } else {
             showNotification('Ошибка загрузки баннера', 'error');
@@ -605,6 +893,131 @@ function escapeHtml(text) {
 .engagement-label {
     color: var(--text-dim);
     font-size: 0.9rem;
+}
+
+/* Модальное окно */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background: #1a1a2e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    max-width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: #a0aec0;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    transition: color 0.2s;
+}
+
+.modal-close:hover {
+    color: #fff;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    padding: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #fff;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+textarea.form-control {
+    resize: vertical;
+    font-family: inherit;
+}
+
+.studio-video-actions button {
+    margin-left: 0.5rem;
+}
+
+#cropperModal .modal-content {
+    background: var(--glass);
+    backdrop-filter: blur(40px);
+}
+
+#cropperModal .cropper-container {
+    max-height: 500px;
+}
+
+#cropperModal .cropper-bg {
+    background: #000;
 }
 </style>
 {% endblock %}

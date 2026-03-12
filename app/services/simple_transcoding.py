@@ -16,18 +16,17 @@ class SimpleTranscodingService:
     def transcode_to_webm(video_id: int):
         """Конвертировать видео в WebM VP9 в фоновом потоке"""
         logger.info(f'Starting transcoding for video {video_id}')
-        thread = threading.Thread(target=SimpleTranscodingService._transcode_worker, args=(video_id,))
+        # Получаем текущий app для передачи в поток
+        app = current_app._get_current_object()
+        thread = threading.Thread(target=SimpleTranscodingService._transcode_worker, args=(video_id, app))
         thread.daemon = True
         thread.start()
 
     @staticmethod
-    def _transcode_worker(video_id: int):
+    def _transcode_worker(video_id: int, app):
         """Рабочий поток для транскодирования"""
         try:
-            # Получить видео из базы
-            from app import create_app
-            app = create_app()
-
+            # Используем переданный app вместо создания нового
             with app.app_context():
                 video = Video.query.get(video_id)
                 if not video:
@@ -77,7 +76,7 @@ class SimpleTranscodingService:
                     error_msg = result.stderr if result.stderr else 'FFmpeg conversion failed'
                     logger.error(f'Transcoding failed for video {video_id}: {error_msg}')
                     video.transcoding_status = 'failed'
-                    video.transcoding_error = error_msg[:500]  # Ограничить длину
+                    video.transcoding_error = error_msg[:500]
                     db.session.commit()
 
         except Exception as e:

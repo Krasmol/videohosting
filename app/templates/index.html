@@ -144,6 +144,12 @@ function renderVideoCard(v) {
     const dur = formatDuration(v.duration);
     const date = timeAgo(v.created_at);
     const cats = {gaming:'Игры',music:'Музыка',education:'Образование',entertainment:'Развлечения',tech:'Технологии',sports:'Спорт',news:'Новости',blog:'Блог',other:'Другое'};
+
+    // Аватар канала
+    const channelAvatar = v.channel?.avatar_url
+        ? `<img src="${v.channel.avatar_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:0.5rem;">`
+        : `<i class="fas fa-user-circle" style="font-size:1.2rem;margin-right:0.5rem;"></i>`;
+
     return `
     <div class="video-card" onclick="window.location.href='/video/${v.id}'">
         <div class="video-thumbnail">
@@ -154,8 +160,8 @@ function renderVideoCard(v) {
         </div>
         <div class="video-info">
             <h3 class="video-title">${escapeHtml(v.title)}</h3>
-            ${v.channel ? `<p class="video-channel" onclick="event.stopPropagation();window.location.href='/channel/${v.channel.id}'">
-                <i class="fas fa-user-circle" style="font-size:1.2rem;"></i>
+            ${v.channel ? `<p class="video-channel" onclick="event.stopPropagation();window.location.href='/channel/${v.channel.id}'" style="display:flex;align-items:center;">
+                ${channelAvatar}
                 ${escapeHtml(v.channel.name)}
             </p>` : ''}
             <div class="video-meta">

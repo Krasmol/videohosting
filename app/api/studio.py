@@ -1,12 +1,20 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
+from werkzeug.utils import secure_filename
 from app.api.auth import require_auth
 from app.models import Channel, Video, VideoView, DailyVideoStats, Subscription, VideoComment
 from app.services.video_service import VideoService
 from app import db
 from datetime import datetime, timedelta
 from sqlalchemy import func
+import os
+from PIL import Image
 
 studio_bp = Blueprint('studio', __name__)
+
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+
+def allowed_image_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
 @studio_bp.route('/dashboard', methods=['GET'])
@@ -169,8 +177,145 @@ def update_video_metadata(video_id):
             'description': video.description,
             'category': video.category,
             'tags': video.tags,
-            'access_level': video.access_level
+            'access_level': video.access_level,
+            'thumbnail_url': VideoService.get_thumbnail_url(video)
         }
+    }), 200
+
+
+@studio_bp.route('/videos/<int:video_id>/thumbnail', methods=['POST'])
+@require_auth
+def upload_custom_thumbnail(video_id):
+    """Загрузить кастомное превью для видео"""
+    user = request.current_user
+
+    video = Video.query.get(video_id)
+    if not video:
+        return jsonify({
+            'error': {
+                'code': 'NOT_FOUND',
+                'message': 'Video not found'
+            }
+        }), 404
+
+    # Проверка прав
+    channel = Channel.query.get(video.channel_id)
+    if not channel or channel.author_id != user.id:
+        return jsonify({
+            'error': {
+                'code': 'FORBIDDEN',
+                'message': 'You do not have permission to edit this video'
+            }
+        }), 403
+
+    if 'thumbnail' not in request.files:
+        return jsonify({
+            'error': {
+                'code': 'BAD_REQUEST',
+                'message': 'No thumbnail file provided'
+            }
+        }), 400
+
+    file = request.files['thumbnail']
+    if file.filename == '':
+        return jsonify({
+            'error': {
+                'code': 'BAD_REQUEST',
+                'message': 'No file selected'
+            }
+        }), 400
+
+    if not allowed_image_file(file.filename):
+        return jsonify({
+            'error': {
+                'code': 'BAD_REQUEST',
+                'message': 'Invalid file type. Allowed: png, jpg, jpeg, webp'
+            }
+        }), 400
+
+    try:
+        # Удалить старое превью если есть
+        if video.custom_thumbnail_path and os.path.exists(video.custom_thumbnail_path):
+            try:
+                os.remove(video.custom_thumbnail_path)
+            except:
+                pass
+
+        # Сохранить новое превью
+        filename = secure_filename(f"video_{video.id}_custom_{int(datetime.utcnow().timestamp())}.jpg")
+        thumbnail_path = os.path.join(current_app.config['THUMBNAIL_FOLDER'], filename)
+
+        # Открыть и оптимизировать изображение
+        img = Image.open(file)
+
+        # Конвертировать в RGB если нужно
+        if img.mode in ('RGBA', 'LA', 'P'):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+            img = background
+
+        # Изменить размер до 1280x720 (16:9)
+        img.thumbnail((1280, 720), Image.Resampling.LANCZOS)
+
+        # Сохранить с оптимизацией
+        img.save(thumbnail_path, 'JPEG', quality=85, optimize=True)
+
+        video.custom_thumbnail_path = thumbnail_path
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Thumbnail uploaded successfully',
+            'thumbnail_url': VideoService.get_thumbnail_url(video)
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'error': {
+                'code': 'INTERNAL_SERVER_ERROR',
+                'message': f'Failed to upload thumbnail: {str(e)}'
+            }
+        }), 500
+
+
+@studio_bp.route('/videos/<int:video_id>/thumbnail', methods=['DELETE'])
+@require_auth
+def delete_custom_thumbnail(video_id):
+    """Удалить кастомное превью и вернуться к автоматическому"""
+    user = request.current_user
+
+    video = Video.query.get(video_id)
+    if not video:
+        return jsonify({
+            'error': {
+                'code': 'NOT_FOUND',
+                'message': 'Video not found'
+            }
+        }), 404
+
+    # Проверка прав
+    channel = Channel.query.get(video.channel_id)
+    if not channel or channel.author_id != user.id:
+        return jsonify({
+            'error': {
+                'code': 'FORBIDDEN',
+                'message': 'You do not have permission to edit this video'
+            }
+        }), 403
+
+    if video.custom_thumbnail_path:
+        if os.path.exists(video.custom_thumbnail_path):
+            try:
+                os.remove(video.custom_thumbnail_path)
+            except:
+                pass
+        video.custom_thumbnail_path = None
+        db.session.commit()
+
+    return jsonify({
+        'message': 'Custom thumbnail deleted',
+        'thumbnail_url': VideoService.get_thumbnail_url(video)
     }), 200
 
 

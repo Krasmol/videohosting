@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
     checkAuth();
     setupCharCounters();
     setupSearch();
+    checkPrivacyBanner();
 });
 
 async function checkAuth() {
@@ -38,6 +39,14 @@ function showAuthButtons() {
 function showUserMenu(user) {
     document.getElementById('authButtons').style.display = 'none';
     document.getElementById('userMenu').style.display = 'flex';
+
+    // Обновить аватар в меню
+    const avatarDiv = document.querySelector('.user-avatar');
+    if (avatarDiv && user.avatar_url) {
+        avatarDiv.innerHTML = `<img src="${user.avatar_url}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;cursor:pointer;">`;
+        avatarDiv.onclick = toggleUserDropdown;
+    }
+
     const bell = document.getElementById('notifBell');
     const msgLink = document.getElementById('msgLink');
     if (bell) bell.style.display = 'flex';
@@ -179,6 +188,24 @@ async function uploadVideo(event) {
     }
     const token = localStorage.getItem('token');
     if (!token) { showNotification('Необходимо войти', 'error'); return; }
+
+    // Проверяем валидность токена перед загрузкой
+    try {
+        const checkAuth = await fetch(`${API_URL}/auth/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!checkAuth.ok) {
+            localStorage.removeItem('token');
+            showNotification('Сессия истекла. Войдите снова.', 'error');
+            closeModal('uploadModal');
+            setTimeout(() => window.location.reload(), 1000);
+            return;
+        }
+    } catch (e) {
+        showNotification('Ошибка проверки авторизации', 'error');
+        return;
+    }
+
     const errorDiv = document.getElementById('uploadError');
     const progressDiv = document.getElementById('uploadProgress');
     const progressFill = document.getElementById('progressFill');
@@ -202,6 +229,16 @@ async function uploadVideo(event) {
                 progressFill.style.width = '0%';
                 showNotification('Видео загружено!', 'success');
                 setTimeout(() => window.location.reload(), 1000);
+            } else if (xhr.status === 401) {
+                // Сессия истекла - выходим из аккаунта
+                localStorage.removeItem('token');
+                errorDiv.textContent = 'Сессия истекла. Войдите снова.';
+                errorDiv.classList.add('show');
+                progressDiv.style.display = 'none';
+                setTimeout(() => {
+                    closeModal('uploadModal');
+                    window.location.reload();
+                }, 2000);
             } else {
                 const result = JSON.parse(xhr.responseText);
                 errorDiv.textContent = result.error ? result.error.message : 'Ошибка загрузки';
@@ -602,5 +639,23 @@ function performSearch() {
     const query = searchInput?.value.trim();
     if (query) {
         window.location.href = `/search?q=${encodeURIComponent(query)}`;
+    }
+}
+
+function checkPrivacyBanner() {
+    const privacyAccepted = localStorage.getItem('privacyAccepted');
+    if (!privacyAccepted) {
+        const banner = document.getElementById('privacyBanner');
+        if (banner) {
+            banner.style.display = 'block';
+        }
+    }
+}
+
+function acceptPrivacy() {
+    localStorage.setItem('privacyAccepted', 'true');
+    const banner = document.getElementById('privacyBanner');
+    if (banner) {
+        banner.style.display = 'none';
     }
 }

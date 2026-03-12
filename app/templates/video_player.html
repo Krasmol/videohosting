@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Просмотр видео — ZTUBE{% endblock %}
 {% block content %}
-<div class="container">
-    <div class="video-player-container">
+<div class="watch-page-layout">
+    <div class="watch-primary">
         <div class="video-player">
             <video id="videoPlayer" controls autoplay playsinline>
                 <source id="videoSource" src="" type="video/mp4">
@@ -83,6 +83,16 @@
                     <div id="commentError" class="error-message"></div>
                 </div>
                 <div id="commentsList" class="comments-list-modern"></div>
+            </div>
+        </div>
+    </div>
+    <div class="watch-secondary">
+        <div class="related-videos-section">
+            <h3 class="related-section-title">Рекомендации</h3>
+            <div id="relatedVideosList" class="related-videos-list">
+                <div class="loading-related">
+                    <i class="fas fa-spinner fa-spin"></i> Загрузка...
+                </div>
             </div>
         </div>
     </div>
@@ -223,6 +233,7 @@ async function loadVideo() {
         await loadStream();
         await loadMyReaction();
         await loadComments();
+        await loadRelatedVideos();
     } catch (e) { showError('Ошибка загрузки'); }
 }
 
@@ -490,13 +501,57 @@ async function createRoomForVideo() {
 function goToChannel() { if (currentChannel) window.location.href = '/channel/' + currentChannel.id; }
 function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
+async function loadRelatedVideos() {
+    const list = document.getElementById('relatedVideosList');
+    try {
+        const category = currentVideo?.category || 'all';
+        const r = await fetch('/api/videos/feed?category=' + category);
+        if (!r.ok) { list.innerHTML = '<p class="muted">Не удалось загрузить</p>'; return; }
+        const data = await r.json();
+        const videos = data.recommended.filter(v => v.id !== videoId).slice(0, 20);
+        if (!videos.length) { list.innerHTML = '<p class="muted">Нет рекомендаций</p>'; return; }
+        list.innerHTML = videos.map(renderRelatedVideo).join('');
+    } catch (e) {
+        list.innerHTML = '<p class="muted">Ошибка загрузки</p>';
+    }
+}
+
+function renderRelatedVideo(v) {
+    const duration = v.duration ? formatDuration(v.duration) : '';
+    const views = (v.views_count || 0).toLocaleString('ru-RU');
+    const thumb = v.thumbnail_url || '/static/img/default-thumb.jpg';
+    return `
+        <div class="related-video-item" onclick="window.location.href='/video/${v.id}'">
+            <div class="related-thumb">
+                <img src="${thumb}" alt="">
+                ${duration ? `<span class="related-duration">${duration}</span>` : ''}
+            </div>
+            <div class="related-info">
+                <h4 class="related-title">${escapeHtml(v.title)}</h4>
+                <p class="related-channel">${v.channel ? escapeHtml(v.channel.name) : ''}</p>
+                <p class="related-meta">${views} просмотров</p>
+            </div>
+        </div>
+    `;
+}
+
+function formatDuration(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 function showError(msg) {
     document.querySelector('.video-player-container').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-circle"></i><h3>' + msg + '</h3><button class="btn btn-primary" onclick="window.location.href=\'/\'"><i class="fas fa-home"></i> На главную</button></div>';
 }
 </script>
 
 <style>
-.video-player-container{max-width:1200px;margin:0 auto;padding:2rem 0}
+.watch-page-layout{display:grid;grid-template-columns:1fr 400px;gap:1.5rem;max-width:1800px;margin:0 auto;padding:1.5rem 2rem}
+.watch-primary{min-width:0}
+.watch-secondary{position:sticky;top:80px;height:fit-content;max-height:calc(100vh - 100px);overflow-y:auto}
 .video-player{background:#000;border-radius:20px;overflow:hidden;margin-bottom:1.5rem;box-shadow:0 10px 40px rgba(0,0,0,0.5)}
 .video-player video{width:100%;display:block;aspect-ratio:16/9}
 .video-details{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:20px;padding:2rem}
@@ -516,5 +571,42 @@ function showError(msg) {
 .video-description-box p{color:var(--text-dim);line-height:1.6;white-space:pre-wrap}
 .video-tags-row{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:1rem}
 .video-tag{background:rgba(102,126,234,0.1);color:#667eea;padding:0.25rem 0.75rem;border-radius:50px;font-size:0.8rem;font-weight:500}
+
+.related-videos-section{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;padding:1rem}
+.related-section-title{font-size:1rem;font-weight:700;margin-bottom:1rem;padding:0 0.5rem}
+.related-videos-list{display:flex;flex-direction:column;gap:0.75rem}
+.loading-related{text-align:center;padding:2rem;color:var(--text-dim)}
+.related-video-item{display:flex;gap:0.75rem;padding:0.5rem;border-radius:12px;cursor:pointer;transition:background 0.2s}
+.related-video-item:hover{background:rgba(255,255,255,0.05)}
+.related-thumb{position:relative;width:168px;min-width:168px;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#1a1f3a 0%,#2d1b4e 100%)}
+.related-thumb img{width:100%;height:100%;object-fit:cover}
+.related-duration{position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.85);padding:2px 6px;border-radius:4px;font-size:0.7rem;font-weight:600}
+.related-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:0.25rem}
+.related-title{font-size:0.9rem;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:0}
+.related-channel{font-size:0.8rem;color:var(--text-dim);margin:0}
+.related-meta{font-size:0.75rem;color:var(--text-dim);margin:0}
+
+@media (max-width:1200px){
+    .watch-page-layout{grid-template-columns:1fr 350px;gap:1rem;padding:1rem}
+    .related-thumb{width:140px;min-width:140px}
+}
+
+@media (max-width:968px){
+    .watch-page-layout{grid-template-columns:1fr;gap:1.5rem}
+    .watch-secondary{position:static;max-height:none}
+    .related-videos-section{max-width:100%}
+    .related-video-item{padding:0.75rem}
+    .related-thumb{width:168px;min-width:168px}
+}
+
+@media (max-width:640px){
+    .watch-page-layout{padding:0.5rem}
+    .video-player{border-radius:12px;margin-bottom:1rem}
+    .video-details{border-radius:12px;padding:1rem}
+    .video-title-large{font-size:1.3rem}
+    .related-videos-section{border-radius:12px;padding:0.75rem}
+    .related-thumb{width:120px;min-width:120px}
+    .related-title{font-size:0.85rem}
+}
 </style>
 {% endblock %}

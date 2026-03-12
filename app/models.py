@@ -78,6 +78,7 @@ class Video(db.Model):
     description = db.Column(db.String(2000))
     file_path = db.Column(db.String(500), nullable=False)
     thumbnail_path = db.Column(db.String(500), nullable=True)
+    custom_thumbnail_path = db.Column(db.String(500), nullable=True)
     duration = db.Column(db.Integer, nullable=False)
     category = db.Column(db.String(50), default='other', nullable=False)
     # If true, video appears in all categories feeds.

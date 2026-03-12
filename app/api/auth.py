@@ -28,6 +28,8 @@ def require_auth(f):
         user = auth_service.validate_session(token)
         if not user:
             return jsonify({'error': {'code': 'UNAUTHORIZED', 'message': 'Invalid or expired session token'}}), 401
+        # Автоматически продлеваем сессию при каждом запросе
+        auth_service.refresh_session(token)
         request.current_user = user
         return f(*args, **kwargs)
     return decorated_function

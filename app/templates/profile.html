@@ -52,6 +52,15 @@ async function loadProfile() {
         const r = await fetch(`/api/auth/users/${userId}`);
         if (!r.ok) { document.querySelector('.container').innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><h3>Пользователь не найден</h3></div>'; return; }
         profileUser = await r.json();
+
+        // Установить аватар
+        const avatarDiv = document.getElementById('profileAvatar');
+        if (profileUser.avatar_url) {
+            avatarDiv.innerHTML = `<img src="${profileUser.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+        } else {
+            avatarDiv.innerHTML = '<i class="fas fa-user-circle"></i>';
+        }
+
         document.getElementById('profileName').textContent = profileUser.display_name;
         document.getElementById('profileTag').textContent = profileUser.tag;
         document.getElementById('profileBio').textContent = profileUser.bio || '';

@@ -144,6 +144,7 @@ class RoomService:
                     'user_id': p.user_id,
                     'display_name': user.get_display_name() if user else f'User #{p.user_id}',
                     'tag': user.get_full_tag() if user else '',
+                    'avatar_url': user.avatar_url if user else None,
                     'joined_at': p.joined_at.isoformat()
                 })
         return data

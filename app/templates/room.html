@@ -175,7 +175,7 @@ function initializeWebSocket() {
     socket.on('pause_event', (d) => { if (!isSyncing && videoPlayer) { isSyncing = true; videoPlayer.currentTime = d.position; videoPlayer.pause(); setTimeout(() => isSyncing = false, 200); } });
     socket.on('seek_event', (d) => { if (!isSyncing && videoPlayer) { isSyncing = true; videoPlayer.currentTime = d.position; setTimeout(() => isSyncing = false, 200); } });
     socket.on('state_sync', (d) => { if (videoPlayer && Math.abs(videoPlayer.currentTime - d.position) > 3) videoPlayer.currentTime = d.position; });
-    socket.on('chat_message_event', (d) => { addChatMessage(d.display_name || d.username, d.message); });
+    socket.on('chat_message_event', (d) => { addChatMessage(d.display_name || d.username, d.message, false, d.avatar_url); });
     if (videoPlayer) {
         videoPlayer.addEventListener('play', () => { if (isOwner && !isSyncing && socket && socket.connected) socket.emit('play', { room_id: roomId, position: videoPlayer.currentTime }); });
         videoPlayer.addEventListener('pause', () => { if (isOwner && !isSyncing && socket && socket.connected) socket.emit('pause', { room_id: roomId, position: videoPlayer.currentTime }); });
@@ -223,15 +223,20 @@ async function loadParticipants() {
         document.getElementById('participantCount').textContent = ps.length;
         const list = document.getElementById('participantsList');
         if (ps.length === 0) { list.innerHTML = '<div class="no-participants">Нет участников</div>'; return; }
-        list.innerHTML = ps.map(p => '<div class="participant-item ' + (p.user_id === room.owner_id ? 'host' : '') + '">' +
-            '<div class="participant-avatar"><i class="fas fa-user"></i></div>' +
-            '<div class="participant-info"><span class="participant-name">' + escapeHtml(p.display_name || ('Пользователь #' + p.user_id)) + '</span>' +
-            (p.tag ? '<small style="color:var(--text-dim)">' + escapeHtml(p.tag) + '</small>' : '') +
-            (p.user_id === room.owner_id ? '<span class="host-badge">Хост</span>' : '') +
-            '</div>' +
-            (currentUser && currentUser.id === room.owner_id && p.user_id !== room.owner_id ?
-                '<button class="btn-kick" onclick="kickUser(' + p.user_id + ')" title="Выгнать"><i class="fas fa-times"></i></button>' : '') +
-            '</div>').join('');
+        list.innerHTML = ps.map(p => {
+            const avatarHtml = p.avatar_url
+                ? `<img src="${p.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+                : '<i class="fas fa-user"></i>';
+            return '<div class="participant-item ' + (p.user_id === room.owner_id ? 'host' : '') + '">' +
+                '<div class="participant-avatar">' + avatarHtml + '</div>' +
+                '<div class="participant-info"><span class="participant-name">' + escapeHtml(p.display_name || ('Пользователь #' + p.user_id)) + '</span>' +
+                (p.tag ? '<small style="color:var(--text-dim)">' + escapeHtml(p.tag) + '</small>' : '') +
+                (p.user_id === room.owner_id ? '<span class="host-badge">Хост</span>' : '') +
+                '</div>' +
+                (currentUser && currentUser.id === room.owner_id && p.user_id !== room.owner_id ?
+                    '<button class="btn-kick" onclick="kickUser(' + p.user_id + ')" title="Выгнать"><i class="fas fa-times"></i></button>' : '') +
+                '</div>';
+        }).join('');
     } catch (e) {}
 }
 
@@ -244,14 +249,20 @@ function sendMessage() {
     input.value = '';
 }
 
-function addChatMessage(username, message, isSystem) {
+function addChatMessage(username, message, isSystem, avatarUrl) {
     const container = document.getElementById('chatMessages');
     const el = document.createElement('div');
     el.className = isSystem ? 'chat-message system-message' : 'chat-message';
     if (isSystem) {
         el.innerHTML = '<div class="message-text" style="text-align:center;color:var(--text-dim);font-style:italic;">' + escapeHtml(message) + '</div>';
     } else {
-        el.innerHTML = '<div class="message-header"><span class="message-author">' + escapeHtml(username) + '</span><span class="message-time">' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) + '</span></div><div class="message-text">' + escapeHtml(message) + '</div>';
+        const avatarHtml = avatarUrl
+            ? `<img src="${avatarUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;margin-right:0.75rem;">`
+            : '<i class="fas fa-user-circle" style="font-size:2rem;margin-right:0.75rem;color:var(--text-dim);"></i>';
+        el.innerHTML = '<div style="display:flex;align-items:start;gap:0.5rem;">' +
+            avatarHtml +
+            '<div style="flex:1;"><div class="message-header"><span class="message-author">' + escapeHtml(username) + '</span><span class="message-time">' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) + '</span></div><div class="message-text">' + escapeHtml(message) + '</div></div>' +
+            '</div>';
     }
     const welcome = container.querySelector('.chat-welcome');
     if (welcome) welcome.remove();

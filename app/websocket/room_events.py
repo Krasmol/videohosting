@@ -377,6 +377,15 @@ def handle_chat_message(data):
                     })
                     return
 
+        participant = RoomParticipant.query.filter_by(
+            room_id=room_id,
+            user_id=user.id
+        ).first()
+
+        if not participant:
+            emit('error', {'message': 'You are not a participant of this room'})
+            return
+
         chat_message = ChatMessage(
             room_id=room_id,
             user_id=user.id,
@@ -400,6 +409,7 @@ def handle_chat_message(data):
             'user_id': user.id,
             'username': user.username,
             'display_name': user.get_display_name(),
+            'avatar_url': user.avatar_url,
             'message': message,
             'timestamp': chat_message.timestamp.isoformat()
         }, room=str(room_id))

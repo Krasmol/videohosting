@@ -248,37 +248,6 @@
     background: rgba(0, 0, 0, 0.2);
 }
 
-/* Site footer */
-.site-footer {
-    margin-top: 2rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(0, 0, 0, 0.12);
-}
-
-.footer-inner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1.25rem 0;
-}
-
-.footer-copy {
-    opacity: 0.8;
-    font-size: 0.9rem;
-}
-
-.footer-link {
-    opacity: 0.85;
-    text-decoration: none;
-    font-size: 0.9rem;
-}
-
-.footer-link:hover {
-    opacity: 1;
-    text-decoration: underline;
-}
-
 /* ============================================
    ALERTS & NOTIFICATIONS
    ============================================ */

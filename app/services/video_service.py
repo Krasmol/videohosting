@@ -253,6 +253,11 @@ class VideoService:
 
     @staticmethod
     def get_thumbnail_url(video: Video) -> Optional[str]:
+        # Приоритет: кастомное превью > автоматическое превью
+        if video.custom_thumbnail_path and os.path.exists(video.custom_thumbnail_path):
+            filename = os.path.basename(video.custom_thumbnail_path)
+            return f"/thumbnails/{filename}"
+
         # Happy path
         if video.thumbnail_path and os.path.exists(video.thumbnail_path):
             filename = os.path.basename(video.thumbnail_path)
@@ -300,6 +305,15 @@ class VideoService:
             'thumbnail_url': VideoService.get_thumbnail_url(video),
             'created_at': video.created_at.isoformat()
         }
+
+        # Добавить информацию о канале и авторе
+        if video.channel:
+            data['channel'] = {
+                'id': video.channel.id,
+                'name': video.channel.name,
+                'avatar_url': video.channel.author.avatar_url if video.channel.author else None
+            }
+
         if include_stream_url and video.status == 'ready':
             try:
                 data['stream_url'] = VideoService.get_stream_url(video)
