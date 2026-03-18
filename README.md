@@ -1,158 +1,147 @@
-# Video Hosting Platform
+# Видеохостинг на Flask
 
-A Flask-based video hosting platform with real-time co-viewing capabilities, channel management, and subscription features.
+Платформа для размещения видео с возможностью совместного просмотра в реальном времени, системой каналов и подписок.
 
-## Features
+## Возможности
 
-- **Video Management**: Upload, manage, and stream video content
-- **Channel System**: Content creator profiles with subscriber management
-- **Co-Viewing Rooms**: Watch videos together with synchronized playback
-- **Real-Time Chat**: Live chat during co-viewing sessions
-- **Subscription Tiers**: Regular subscriptions and sponsor-level memberships
-- **Advertisement System**: Monetization through targeted ads (sponsors get ad-free experience)
-- **WebSocket Support**: Real-time communication for chat and playback synchronization
+- **Управление видео**: загрузка, хранение и стриминг видеоконтента
+- **Система каналов**: профили авторов контента с управлением подписчиками
+- **Комнаты для совместного просмотра**: смотрите видео вместе с друзьями с синхронизацией воспроизведения
+- **Чат в реальном времени**: общайтесь во время совместных просмотров
+- **Уровни подписок**: обычные подписки и спонсорство (для авторов)
+- **Рекламная система**: монетизация через таргетированную рекламу (спонсоры смотрят без рекламы)
+- **WebSocket поддержка**: всё для живого общения и синхронизации видео
 
-## Technology Stack
+## Технологии
 
-- **Backend**: Flask 3.0, Python 3.8+
-- **Database**: SQLAlchemy with SQLite (dev) / PostgreSQL (prod)
-- **Real-Time**: Flask-SocketIO with Redis message queue
-- **Caching**: Redis for session management and caching
-- **Background Tasks**: Celery for video processing
-- **Testing**: Pytest with Hypothesis for property-based testing
+- **Бэкенд**: Flask 3.0, Python 3.8+
+- **База данных**: SQLAlchemy + SQLite (для разработки) / PostgreSQL (на боевом)
+- **Реалтайм**: Flask-SocketIO с Redis в качестве message broker
+- **Кэширование**: Redis для сессий и временных данных
+- **Фоновые задачи**: Celery для обработки видео
+- **Тестирование**: Pytest + Hypothesis (property-based тесты)
 
-## Project Structure
+## Структура проекта
 
 ```
 video-hosting-platform/
 ├── app/
-│   ├── __init__.py          # Application factory
-│   ├── models.py            # Database models
-│   ├── api/                 # REST API endpoints
-│   ├── services/            # Business logic services
-│   └── websocket/           # WebSocket event handlers
-├── tests/                   # Test suite
-├── config.py                # Configuration classes
-├── run.py                   # Application entry point
-├── celery_worker.py         # Celery worker configuration
-└── requirements.txt         # Python dependencies
+│   ├── __init__.py          # Инициализация приложения
+│   ├── models.py             # Модели базы данных
+│   ├── api/                  # REST API эндпоинты
+│   ├── services/             # Бизнес-логика
+│   └── websocket/            # Обработчики WebSocket событий
+├── tests/                    # Тесты
+├── config.py                 # Настройки приложения
+├── run.py                    # Точка входа
+├── celery_worker.py          # Конфигурация Celery
+└── requirements.txt          # Зависимости
 ```
 
-## Setup Instructions
+## Как запустить
 
-### Prerequisites
+### Что нужно установить
 
-- Python 3.8 or higher
-- Redis server
-- FFmpeg (for video processing)
+- Python 3.8 или новее
+- Redis
+- FFmpeg (для обработки видео)
 
-### Installation
+### Установка
 
-1. **Clone the repository**
+1. **Склонировать репозиторий**
    ```bash
-   git clone <repository-url>
+   git clone <ссылка-на-репозиторий>
    cd video-hosting-platform
    ```
 
-2. **Create virtual environment**
+2. **Создать виртуальное окружение**
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate  # На Windows: venv\Scripts\activate
    ```
 
-3. **Install dependencies**
+3. **Установить зависимости**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Set up environment variables**
+4. **Настроить переменные окружения**
    ```bash
    cp .env.example .env
-   # Edit .env with your configuration
+   # Отредактируйте .env под себя
    ```
 
-5. **Initialize the database**
+5. **Создать базу данных**
    ```bash
    flask init-db
    ```
 
-### Running the Application
+### Запуск
 
-#### Development Mode
+#### Для разработки
 
-1. **Start Redis server**
+1. **Запустить Redis**
    ```bash
    redis-server
    ```
 
-2. **Start the Flask application**
+2. **Запустить Flask приложение**
    ```bash
    python run.py
    ```
 
-3. **Start Celery worker** (in a separate terminal)
+3. **Запустить Celery** (в отдельном терминале)
    ```bash
    celery -A celery_worker.celery worker --loglevel=info
    ```
 
-The application will be available at `http://localhost:5000`
+Приложение будет доступно по адресу `http://localhost:5000`
 
-#### Production Mode
+#### Для продакшена
 
-For production deployment, use a WSGI server like Gunicorn with eventlet or gevent:
+Лучше использовать Gunicorn с eventlet:
 
 ```bash
 gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 run:app
 ```
 
-## Configuration
+## Настройки
 
-Configuration is managed through environment variables. Key settings:
+Основные переменные окружения:
 
-- `FLASK_ENV`: Environment (development/production/testing)
-- `SECRET_KEY`: Secret key for session encryption
-- `DATABASE_URL`: Database connection string
-- `REDIS_URL`: Redis connection string
-- `UPLOAD_FOLDER`: Directory for video uploads
-- `MAX_CONTENT_LENGTH`: Maximum upload size in bytes
+- `FLASK_ENV`: окружение (development/production/testing)
+- `SECRET_KEY`: секретный ключ для сессий
+- `DATABASE_URL`: подключение к базе данных
+- `REDIS_URL`: подключение к Redis
+- `UPLOAD_FOLDER`: папка для загруженных видео
+- `MAX_CONTENT_LENGTH`: максимальный размер загружаемого файла (в байтах)
 
-See `.env.example` for all available configuration options.
+Все доступные настройки можно посмотреть в `.env.example`
 
-## Testing
-
-Run the test suite:
+## Тестирование
 
 ```bash
-# Run all tests
+# Запустить все тесты
 pytest
 
-# Run with coverage report
+# С отчетом о покрытии кода
 pytest --cov=app --cov-report=html
 
-# Run specific test categories
-pytest -m unit           # Unit tests only
-pytest -m property_test  # Property-based tests only
-pytest -m integration    # Integration tests only
+# Только определенные тесты
+pytest -m unit           # модульные тесты
+pytest -m property_test  # property-based тесты
+pytest -m integration    # интеграционные тесты
 ```
 
-## API Documentation
+## API Документация
 
-API endpoints will be documented as they are implemented in subsequent tasks.
+В разработке. Будет добавлена по мере реализации эндпоинтов.
 
-## Development Roadmap
+## Планы по разработке
 
-- [x] Task 1: Project Setup and Core Infrastructure
-- [x] Task 2: Database Models and Migrations
-- [x] Task 3: Authentication and User Management
-- [x] Task 4: Channel Management
-- [x] Task 5: Video Management Core
-- [x] Task 6-24: Additional features (see tasks.md)
-
-## License
-
-[License information to be added]
-
-## Contributing
-
-[Contributing guidelines to be added]
-
+- [x] Этап 1: Базовая структура проекта
+- [x] Этап 2: Модели данных и миграции
+- [x] Этап 3: Регистрация и авторизация
+- [x] Этап 4: Управление каналами
+- [x] Этап 5: Загрузка и хранение видео
+- [ ] Этап 6-24: Остальные фичи (подробнее в tasks.md)
