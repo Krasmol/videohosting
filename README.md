@@ -50,7 +50,7 @@ video-hosting-platform/
 
 1. **Склонировать репозиторий**
    ```bash
-   git clone <ссылка-на-репозиторий>
+   git clone <(https://github.com/Krasmol/videohosting)>
    cd video-hosting-platform
    ```
 
@@ -95,7 +95,7 @@ video-hosting-platform/
    celery -A celery_worker.celery worker --loglevel=info
    ```
 
-Приложение будет доступно по адресу `http://localhost:5000`
+Приложение будет доступно по адресу `http://127.0.0.1:5000`
 
 #### Для продакшена
 
