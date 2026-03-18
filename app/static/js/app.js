@@ -384,10 +384,40 @@ async function showSubscriptions() {
         const resp = await fetch(`${API_URL}/subscriptions/my`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (resp.ok) {
             const subs = await resp.json();
-            if (subs.length === 0) showNotification('Нет подписок', 'info');
-            else window.location.href = `/channel/${subs[0].channel_id}`;
+            if (subs.length === 0) {
+                showNotification('Нет подписок', 'info');
+            } else {
+                // Показываем модальное окно со списком подписок
+                showSubscriptionsModal(subs);
+            }
         }
     } catch (e) { showNotification('Ошибка', 'error'); }
+}
+
+function showSubscriptionsModal(subs) {
+    const modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:600px;max-height:80vh;display:flex;flex-direction:column;">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h2><i class="fas fa-heart"></i> Мои подписки</h2>
+            <div style="overflow-y:auto;flex:1;margin-top:1rem;">
+                ${subs.map(sub => `
+                    <div onclick="window.location.href='/channel/${sub.channel_id}'" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:rgba(255,255,255,0.05);border-radius:12px;margin-bottom:0.75rem;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                        <div style="width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <i class="fas fa-tv" style="font-size:1.5rem;"></i>
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;font-size:1rem;margin-bottom:0.25rem;">${escapeHtml(sub.channel_name || 'Канал')}</div>
+                            <div style="font-size:0.85rem;color:var(--text-dim);">Подписка с ${new Date(sub.subscribed_at).toLocaleDateString('ru-RU')}</div>
+                        </div>
+                        <i class="fas fa-chevron-right" style="color:var(--text-dim);"></i>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
 }
 
 function goToMyProfile() {

@@ -43,9 +43,6 @@
             <button class="btn btn-outline" onclick="showInviteModal()">
                 <i class="fas fa-user-plus"></i> Пригласить
             </button>
-            <button class="btn btn-outline" onclick="shareRoom()">
-                <i class="fas fa-share"></i> Поделиться
-            </button>
         </div>
     </div>
     <div class="room-sidebar">
@@ -227,14 +224,29 @@ async function loadParticipants() {
             const avatarHtml = p.avatar_url
                 ? `<img src="${p.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
                 : '<i class="fas fa-user"></i>';
-            return '<div class="participant-item ' + (p.user_id === room.owner_id ? 'host' : '') + '">' +
+            const isHost = p.user_id === room.owner_id;
+            const canModerate = currentUser && currentUser.id === room.owner_id && !isHost;
+
+            let actionsHtml = '';
+            if (canModerate) {
+                actionsHtml = `
+                    <div class="participant-actions">
+                        <button class="btn-action" onclick="showModerateMenu(event, ${p.user_id}, '${escapeHtml(p.display_name)}', ${p.is_muted})" title="Модерация">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                    </div>`;
+            }
+
+            const muteIndicator = p.is_muted ? '<i class="fas fa-microphone-slash" style="color:#f5576c;margin-left:0.5rem;" title="Замучен"></i>' : '';
+
+            return '<div class="participant-item ' + (isHost ? 'host' : '') + '">' +
                 '<div class="participant-avatar">' + avatarHtml + '</div>' +
-                '<div class="participant-info"><span class="participant-name">' + escapeHtml(p.display_name || ('Пользователь #' + p.user_id)) + '</span>' +
-                (p.tag ? '<small style="color:var(--text-dim)">' + escapeHtml(p.tag) + '</small>' : '') +
-                (p.user_id === room.owner_id ? '<span class="host-badge">Хост</span>' : '') +
+                '<div class="participant-info">' +
+                    '<span class="participant-name">' + escapeHtml(p.display_name || ('Пользователь #' + p.user_id)) + muteIndicator + '</span>' +
+                    (p.tag ? '<small style="color:var(--text-dim)">' + escapeHtml(p.tag) + '</small>' : '') +
+                    (isHost ? '<span class="host-badge">Хост</span>' : '') +
                 '</div>' +
-                (currentUser && currentUser.id === room.owner_id && p.user_id !== room.owner_id ?
-                    '<button class="btn-kick" onclick="kickUser(' + p.user_id + ')" title="Выгнать"><i class="fas fa-times"></i></button>' : '') +
+                actionsHtml +
                 '</div>';
         }).join('');
     } catch (e) {}
@@ -298,9 +310,173 @@ async function kickUser(userId) {
     } catch (e) {}
 }
 
+function showModerateMenu(event, userId, userName, isMuted) {
+    event.stopPropagation();
+    const existingMenu = document.getElementById('moderateMenu');
+    if (existingMenu) existingMenu.remove();
+
+    const menu = document.createElement('div');
+    menu.id = 'moderateMenu';
+    menu.className = 'moderate-menu';
+    menu.innerHTML = `
+        <div class="moderate-menu-header">${userName}</div>
+        <button onclick="kickUser(${userId}); closeModerateMenu();">
+            <i class="fas fa-sign-out-alt"></i> Выгнать
+        </button>
+        <button onclick="showBanDialog(${userId}, '${userName}'); closeModerateMenu();">
+            <i class="fas fa-ban"></i> Забанить
+        </button>
+        ${isMuted
+            ? `<button onclick="unmuteUser(${userId}); closeModerateMenu();"><i class="fas fa-microphone"></i> Размутить</button>`
+            : `<button onclick="showMuteDialog(${userId}, '${userName}'); closeModerateMenu();"><i class="fas fa-microphone-slash"></i> Замутить</button>`
+        }
+    `;
+
+    const rect = event.target.closest('button').getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.top = rect.bottom + 5 + 'px';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+    document.body.appendChild(menu);
+
+    setTimeout(() => {
+        document.addEventListener('click', closeModerateMenu, { once: true });
+    }, 10);
+}
+
+function closeModerateMenu() {
+    const menu = document.getElementById('moderateMenu');
+    if (menu) menu.remove();
+}
+
+function showBanDialog(userId, userName) {
+    const modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:450px;">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h2><i class="fas fa-ban"></i> Забанить ${userName}</h2>
+            <div class="form-group">
+                <label>Длительность</label>
+                <select id="banDuration" style="width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);border-radius:12px;">
+                    <option value="5">5 минут</option>
+                    <option value="30">30 минут</option>
+                    <option value="60">1 час</option>
+                    <option value="1440">24 часа</option>
+                    <option value="0">Навсегда</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Причина (необязательно)</label>
+                <input type="text" id="banReason" maxlength="200" placeholder="Причина бана..." style="width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);border-radius:12px;">
+            </div>
+            <button class="btn btn-primary btn-block" onclick="banUser(${userId})">Забанить</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function showMuteDialog(userId, userName) {
+    const modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:450px;">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h2><i class="fas fa-microphone-slash"></i> Замутить ${userName}</h2>
+            <div class="form-group">
+                <label>Длительность</label>
+                <select id="muteDuration" style="width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);border-radius:12px;">
+                    <option value="5">5 минут</option>
+                    <option value="30">30 минут</option>
+                    <option value="60">1 час</option>
+                    <option value="1440">24 часа</option>
+                    <option value="0">Навсегда</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Причина (необязательно)</label>
+                <input type="text" id="muteReason" maxlength="200" placeholder="Причина мута..." style="width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);border-radius:12px;">
+            </div>
+            <button class="btn btn-primary btn-block" onclick="muteUser(${userId})">Замутить</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+async function banUser(userId) {
+    const duration = parseInt(document.getElementById('banDuration').value);
+    const reason = document.getElementById('banReason').value.trim();
+    const token = localStorage.getItem('token');
+
+    const data = { reason };
+    if (duration > 0) data.duration_minutes = duration;
+
+    try {
+        const r = await fetch('/api/rooms/' + roomId + '/ban/' + userId, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (r.ok) {
+            showNotification('Пользователь забанен', 'success');
+            document.querySelector('.modal.show').remove();
+            loadParticipants();
+        } else {
+            const d = await r.json();
+            showNotification(d.error.message, 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка', 'error');
+    }
+}
+
+async function muteUser(userId) {
+    const duration = parseInt(document.getElementById('muteDuration').value);
+    const reason = document.getElementById('muteReason').value.trim();
+    const token = localStorage.getItem('token');
+
+    const data = { reason };
+    if (duration > 0) data.duration_minutes = duration;
+
+    try {
+        const r = await fetch('/api/rooms/' + roomId + '/mute/' + userId, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (r.ok) {
+            showNotification('Пользователь замучен', 'success');
+            document.querySelector('.modal.show').remove();
+            loadParticipants();
+        } else {
+            const d = await r.json();
+            showNotification(d.error.message, 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка', 'error');
+    }
+}
+
+async function unmuteUser(userId) {
+    const token = localStorage.getItem('token');
+    try {
+        const r = await fetch('/api/rooms/' + roomId + '/unmute/' + userId, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (r.ok) {
+            showNotification('Пользователь размучен', 'success');
+            loadParticipants();
+        } else {
+            const d = await r.json();
+            showNotification(d.error.message, 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка', 'error');
+    }
+}
+
 function showInviteModal() { showModal('inviteModal'); }
 function copyInviteLink() { navigator.clipboard.writeText(document.getElementById('inviteLink').value); showNotification('Скопировано!', 'success'); }
-function shareRoom() { if (navigator.share) navigator.share({ title: 'ZTUBE Комната', url: window.location.href }); else copyInviteLink(); }
 function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 </script>
 
@@ -309,12 +485,12 @@ function escapeHtml(t) { const d = document.createElement('div'); d.textContent 
 .room-auth-box{text-align:center;background:var(--glass);backdrop-filter:blur(40px);border:1px solid var(--border);border-radius:24px;padding:3rem;max-width:450px}
 .room-auth-box h2{font-size:1.5rem;margin-bottom:0.5rem}
 .room-auth-box p{color:var(--text-dim);margin-bottom:1rem}
-.room-container{display:grid;grid-template-columns:1fr 400px;gap:2rem;padding:2rem;max-width:1800px;margin:0 auto;height:calc(100vh - 80px)}
-.room-video-section{display:flex;flex-direction:column;gap:1.5rem;min-height:0}
+.room-container{display:grid;grid-template-columns:1fr 400px;gap:2rem;padding:2rem;max-width:1800px;margin:0 auto}
+.room-video-section{display:flex;flex-direction:column;gap:1.5rem}
 .room-header-bar{display:flex;justify-content:space-between;align-items:center}
 .room-header-bar h2{font-size:1.5rem;font-weight:700}
-.video-player-wrapper{background:#000;border-radius:20px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.5);position:relative;max-height:70vh;display:flex;align-items:center;justify-content:center}
-.video-player-wrapper video{width:100%;max-height:70vh;object-fit:contain;display:block}
+.video-player-wrapper{background:#000;border-radius:20px;overflow:visible;box-shadow:0 10px 40px rgba(0,0,0,0.5);position:relative;max-height:55vh;display:flex;align-items:center;justify-content:center}
+.video-player-wrapper video{width:100%;max-height:55vh;object-fit:contain;display:block;border-radius:20px}
 .controls-message{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);padding:10px 20px;border-radius:8px;font-size:14px;pointer-events:none}
 .room-video-info{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;padding:1.5rem}
 .room-video-info h2{font-size:1.5rem;margin-bottom:0.5rem}
@@ -323,7 +499,6 @@ function escapeHtml(t) { const d = document.createElement('div'); d.textContent 
 .room-sidebar{display:flex;flex-direction:column;gap:1.5rem;height:100%}
 .participants-section,.chat-section{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;padding:1.5rem;display:flex;flex-direction:column}
 .participants-section{flex:0 0 auto;max-height:250px}
-.chat-section{flex:1;min-height:0}
 .participants-section h3,.chat-section h3{font-size:1.1rem;margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem}
 .participants-list{overflow-y:auto;flex:1}
 .participant-item{display:flex;align-items:center;gap:0.75rem;padding:0.75rem;border-radius:12px;margin-bottom:0.5rem;transition:background 0.2s}
@@ -335,7 +510,18 @@ function escapeHtml(t) { const d = document.createElement('div'); d.textContent 
 .host-badge{font-size:0.75rem;color:#667eea;font-weight:600}
 .btn-kick{background:rgba(245,87,108,0.1);border:1px solid rgba(245,87,108,0.3);color:#f5576c;padding:0.5rem;border-radius:8px;cursor:pointer;transition:all 0.2s}
 .btn-kick:hover{background:rgba(245,87,108,0.2)}
-.chat-messages{flex:1;overflow-y:auto;margin-bottom:1rem;display:flex;flex-direction:column;gap:0.75rem}
+.participant-actions{display:flex;gap:0.5rem}
+.btn-action{background:rgba(102,126,234,0.1);border:1px solid rgba(102,126,234,0.3);color:#667eea;padding:0.5rem 0.75rem;border-radius:8px;cursor:pointer;transition:all 0.2s;font-size:0.9rem}
+.btn-action:hover{background:rgba(102,126,234,0.2)}
+.moderate-menu{position:fixed;background:rgba(30,35,55,0.98);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:0.5rem;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,0.5);z-index:1000;animation:slideIn 0.2s}
+.moderate-menu-header{padding:0.75rem 1rem;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:0.5rem;color:#fff}
+.moderate-menu button{width:100%;text-align:left;padding:0.75rem 1rem;background:transparent;border:none;color:var(--text);cursor:pointer;border-radius:8px;transition:background 0.2s;display:flex;align-items:center;gap:0.75rem;font-size:0.9rem}
+.moderate-menu button:hover{background:rgba(255,255,255,0.05)}
+.moderate-menu button i{width:1.2rem}
+@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.chat-section{flex:1;min-height:0;display:flex;flex-direction:column}
+.chat-messages{flex:1;overflow-y:auto;margin-bottom:1rem;display:flex;flex-direction:column;gap:0.75rem;min-height:0}
+.chat-input-container{display:flex;gap:0.75rem;flex-shrink:0}
 .chat-welcome{text-align:center;padding:2rem;color:var(--text-dim)}
 .chat-welcome i{font-size:3rem;margin-bottom:1rem;opacity:0.5;display:block}
 .chat-welcome small{display:block;margin-top:0.5rem;font-size:0.8rem}
@@ -345,7 +531,6 @@ function escapeHtml(t) { const d = document.createElement('div'); d.textContent 
 .message-author{font-weight:600;color:#667eea}
 .message-time{font-size:0.75rem;color:var(--text-dim)}
 .message-text{color:var(--text);word-wrap:break-word}
-.chat-input-container{display:flex;gap:0.75rem}
 .chat-input-container input{flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);padding:0.75rem 1rem;border-radius:12px;outline:none;transition:all 0.3s}
 .chat-input-container input:focus{background:rgba(255,255,255,0.1);border-color:rgba(102,126,234,0.5)}
 .chat-input-container button{padding:0.75rem 1.25rem}

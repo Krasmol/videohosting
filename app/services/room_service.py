@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from app import db
-from app.models import Room, RoomParticipant, RoomInvitation, User, Video, Subscription
+from app.models import Room, RoomParticipant, RoomInvitation, RoomBan, RoomMute, User, Video, Subscription
 
 
 class RoomService:
@@ -48,6 +48,10 @@ class RoomService:
         room = Room.query.get(room_id)
         if not room:
             raise ValueError(f"Room with id {room_id} not found")
+
+        # Check if banned
+        if RoomService.is_banned(room_id, user_id):
+            raise PermissionError("You are banned from this room")
 
         existing = RoomParticipant.query.filter_by(room_id=room_id, user_id=user_id).first()
         if existing:
@@ -99,6 +103,132 @@ class RoomService:
         return True
 
     @staticmethod
+    def ban_user(room_id: int, host_id: int, user_id: int, duration_minutes: Optional[int] = None, reason: Optional[str] = None) -> bool:
+        room = Room.query.get(room_id)
+        if not room:
+            raise ValueError(f"Room with id {room_id} not found")
+        if room.owner_id != host_id:
+            raise PermissionError("Only the host can ban users")
+        if user_id == host_id:
+            raise ValueError("Host cannot ban themselves")
+
+        # Remove from room if present
+        participant = RoomParticipant.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if participant:
+            db.session.delete(participant)
+
+        # Check if already banned
+        existing_ban = RoomBan.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if existing_ban:
+            db.session.delete(existing_ban)
+
+        # Create ban
+        banned_until = None
+        if duration_minutes:
+            banned_until = datetime.utcnow() + timedelta(minutes=duration_minutes)
+
+        ban = RoomBan(
+            room_id=room_id,
+            user_id=user_id,
+            banned_by=host_id,
+            banned_until=banned_until,
+            reason=reason
+        )
+        db.session.add(ban)
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def unban_user(room_id: int, host_id: int, user_id: int) -> bool:
+        room = Room.query.get(room_id)
+        if not room:
+            raise ValueError(f"Room with id {room_id} not found")
+        if room.owner_id != host_id:
+            raise PermissionError("Only the host can unban users")
+
+        ban = RoomBan.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if not ban:
+            raise ValueError("User is not banned")
+
+        db.session.delete(ban)
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def mute_user(room_id: int, host_id: int, user_id: int, duration_minutes: Optional[int] = None, reason: Optional[str] = None) -> bool:
+        room = Room.query.get(room_id)
+        if not room:
+            raise ValueError(f"Room with id {room_id} not found")
+        if room.owner_id != host_id:
+            raise PermissionError("Only the host can mute users")
+        if user_id == host_id:
+            raise ValueError("Host cannot mute themselves")
+
+        # Check if user is in room
+        participant = RoomParticipant.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if not participant:
+            raise ValueError("User is not in this room")
+
+        # Check if already muted
+        existing_mute = RoomMute.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if existing_mute:
+            db.session.delete(existing_mute)
+
+        # Create mute
+        muted_until = None
+        if duration_minutes:
+            muted_until = datetime.utcnow() + timedelta(minutes=duration_minutes)
+
+        mute = RoomMute(
+            room_id=room_id,
+            user_id=user_id,
+            muted_by=host_id,
+            muted_until=muted_until,
+            reason=reason
+        )
+        db.session.add(mute)
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def unmute_user(room_id: int, host_id: int, user_id: int) -> bool:
+        room = Room.query.get(room_id)
+        if not room:
+            raise ValueError(f"Room with id {room_id} not found")
+        if room.owner_id != host_id:
+            raise PermissionError("Only the host can unmute users")
+
+        mute = RoomMute.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if not mute:
+            raise ValueError("User is not muted")
+
+        db.session.delete(mute)
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def is_banned(room_id: int, user_id: int) -> bool:
+        ban = RoomBan.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if not ban:
+            return False
+        if ban.banned_until and ban.banned_until < datetime.utcnow():
+            db.session.delete(ban)
+            db.session.commit()
+            return False
+        return True
+
+    @staticmethod
+    def is_muted(room_id: int, user_id: int) -> bool:
+        mute = RoomMute.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if not mute:
+            return False
+        if mute.muted_until and mute.muted_until < datetime.utcnow():
+            db.session.delete(mute)
+            db.session.commit()
+            return False
+        return True
+
+    @staticmethod
     def invite_user(room_id: int, inviter_id: int, invitee_id: int) -> RoomInvitation:
         room = Room.query.get(room_id)
         if not room:
@@ -139,12 +269,14 @@ class RoomService:
             data['participants'] = []
             for p in participants:
                 user = User.query.get(p.user_id)
+                is_muted = RoomService.is_muted(room.id, p.user_id)
                 data['participants'].append({
                     'id': p.id,
                     'user_id': p.user_id,
                     'display_name': user.get_display_name() if user else f'User #{p.user_id}',
                     'tag': user.get_full_tag() if user else '',
                     'avatar_url': user.avatar_url if user else None,
+                    'is_muted': is_muted,
                     'joined_at': p.joined_at.isoformat()
                 })
         return data

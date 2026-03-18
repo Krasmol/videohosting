@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from app import db
 from app.services.room_service import RoomService
-from app.models import Room, RoomParticipant, User, ChatMessage
+from app.models import Room, RoomParticipant, RoomBan, RoomMute, User, ChatMessage
 from app.api.auth import require_auth
 from app.websocket.room_events import kick_user_from_room
 
@@ -105,6 +105,8 @@ def join_room(room_id):
             room.last_activity = datetime.utcnow()
             db.session.commit()
         return jsonify({'message': 'Joined room successfully', 'participant_id': participant.id}), 200
+    except PermissionError as e:
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': str(e)}}), 403
     except ValueError as e:
         error_msg = str(e)
         if 'full' in error_msg.lower():
@@ -163,10 +165,69 @@ def kick_user(room_id, user_id):
     host = request.current_user
     try:
         room_service.kick_user(room_id, host.id, user_id)
-        # HTTP kick удаляет участника из БД, но сокет мог остаться подключенным.
-        # Принудительно выкидываем из Socket.IO комнаты и уведомляем клиента.
         kick_user_from_room(room_id, user_id, reason='kicked_by_host')
         return jsonify({'message': 'User kicked successfully'}), 200
+    except PermissionError as e:
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': str(e)}}), 403
+    except ValueError as e:
+        return jsonify({'error': {'code': 'NOT_FOUND', 'message': str(e)}}), 404
+
+
+@rooms_bp.route('/<int:room_id>/ban/<int:user_id>', methods=['POST'])
+@require_auth
+def ban_user(room_id, user_id):
+    host = request.current_user
+    data = request.get_json() or {}
+    duration = data.get('duration_minutes')
+    reason = data.get('reason', '').strip() or None
+
+    try:
+        room_service.ban_user(room_id, host.id, user_id, duration, reason)
+        kick_user_from_room(room_id, user_id, reason='banned_by_host')
+        return jsonify({'message': 'User banned successfully'}), 200
+    except PermissionError as e:
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': str(e)}}), 403
+    except ValueError as e:
+        return jsonify({'error': {'code': 'NOT_FOUND', 'message': str(e)}}), 404
+
+
+@rooms_bp.route('/<int:room_id>/unban/<int:user_id>', methods=['POST'])
+@require_auth
+def unban_user(room_id, user_id):
+    host = request.current_user
+    try:
+        room_service.unban_user(room_id, host.id, user_id)
+        return jsonify({'message': 'User unbanned successfully'}), 200
+    except PermissionError as e:
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': str(e)}}), 403
+    except ValueError as e:
+        return jsonify({'error': {'code': 'NOT_FOUND', 'message': str(e)}}), 404
+
+
+@rooms_bp.route('/<int:room_id>/mute/<int:user_id>', methods=['POST'])
+@require_auth
+def mute_user(room_id, user_id):
+    host = request.current_user
+    data = request.get_json() or {}
+    duration = data.get('duration_minutes')
+    reason = data.get('reason', '').strip() or None
+
+    try:
+        room_service.mute_user(room_id, host.id, user_id, duration, reason)
+        return jsonify({'message': 'User muted successfully'}), 200
+    except PermissionError as e:
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': str(e)}}), 403
+    except ValueError as e:
+        return jsonify({'error': {'code': 'NOT_FOUND', 'message': str(e)}}), 404
+
+
+@rooms_bp.route('/<int:room_id>/unmute/<int:user_id>', methods=['POST'])
+@require_auth
+def unmute_user(room_id, user_id):
+    host = request.current_user
+    try:
+        room_service.unmute_user(room_id, host.id, user_id)
+        return jsonify({'message': 'User unmuted successfully'}), 200
     except PermissionError as e:
         return jsonify({'error': {'code': 'FORBIDDEN', 'message': str(e)}}), 403
     except ValueError as e:
@@ -204,6 +265,10 @@ def send_chat_message(room_id):
     participant = RoomParticipant.query.filter_by(room_id=room_id, user_id=user.id).first()
     if not participant:
         return jsonify({'error': {'code': 'FORBIDDEN', 'message': 'You are not in this room'}}), 403
+
+    # Check if muted
+    if room_service.is_muted(room_id, user.id):
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': 'You are muted in this room'}}), 403
 
     data = request.get_json()
     if not data or not data.get('message', '').strip():

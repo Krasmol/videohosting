@@ -237,6 +237,41 @@ class RoomInvitation(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self):
+        return f'<RoomInvitation room_id={self.room_id} recipient_id={self.recipient_id}>'
+
+
+class RoomBan(db.Model):
+    __tablename__ = 'room_bans'
+
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    banned_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    banned_until = db.Column(db.DateTime, nullable=True)  # NULL = permanent
+    reason = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint('room_id', 'user_id', name='unique_room_ban'),)
+
+    def __repr__(self):
+        return f'<RoomBan room_id={self.room_id} user_id={self.user_id}>'
+
+
+class RoomMute(db.Model):
+    __tablename__ = 'room_mutes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    muted_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    muted_until = db.Column(db.DateTime, nullable=True)  # NULL = permanent
+    reason = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint('room_id', 'user_id', name='unique_room_mute'),)
+
+    def __repr__(self):
+        return f'<RoomMute room_id={self.room_id} user_id={self.user_id}>'
         return f'<RoomInvitation {self.id} status={self.status}>'
 
 

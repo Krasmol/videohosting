@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from app import socketio, db
 from app.models import Room, RoomParticipant, ChatMessage, User
 from app.services.auth_service import AuthService
+from app.services.room_service import RoomService
 
 active_connections = {}
 
@@ -384,6 +385,11 @@ def handle_chat_message(data):
 
         if not participant:
             emit('error', {'message': 'You are not a participant of this room'})
+            return
+
+        # Check if user is muted
+        if RoomService.is_muted(room_id, user.id):
+            emit('error', {'message': 'You are muted in this room'})
             return
 
         chat_message = ChatMessage(
