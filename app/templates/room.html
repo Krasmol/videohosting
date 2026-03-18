@@ -485,8 +485,8 @@ function escapeHtml(t) { const d = document.createElement('div'); d.textContent 
 .room-auth-box{text-align:center;background:var(--glass);backdrop-filter:blur(40px);border:1px solid var(--border);border-radius:24px;padding:3rem;max-width:450px}
 .room-auth-box h2{font-size:1.5rem;margin-bottom:0.5rem}
 .room-auth-box p{color:var(--text-dim);margin-bottom:1rem}
-.room-container{display:grid;grid-template-columns:1fr 400px;gap:2rem;padding:2rem;max-width:1800px;margin:0 auto}
-.room-video-section{display:flex;flex-direction:column;gap:1.5rem}
+.room-container{display:grid;grid-template-columns:1fr 400px;gap:2rem;padding:2rem;max-width:1800px;margin:0 auto;height:calc(100vh - 80px);overflow:hidden}
+.room-video-section{display:flex;flex-direction:column;gap:1.5rem;overflow-y:auto;max-height:100%}
 .room-header-bar{display:flex;justify-content:space-between;align-items:center}
 .room-header-bar h2{font-size:1.5rem;font-weight:700}
 .video-player-wrapper{background:#000;border-radius:20px;overflow:visible;box-shadow:0 10px 40px rgba(0,0,0,0.5);position:relative;max-height:55vh;display:flex;align-items:center;justify-content:center}
@@ -496,9 +496,9 @@ function escapeHtml(t) { const d = document.createElement('div'); d.textContent 
 .room-video-info h2{font-size:1.5rem;margin-bottom:0.5rem}
 .room-video-info p{color:var(--text-dim)}
 .room-controls{display:flex;gap:1rem}
-.room-sidebar{display:flex;flex-direction:column;gap:1.5rem;height:100%}
+.room-sidebar{display:flex;flex-direction:column;gap:1.5rem;height:100%;max-height:100%;overflow:hidden}
 .participants-section,.chat-section{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;padding:1.5rem;display:flex;flex-direction:column}
-.participants-section{flex:0 0 auto;max-height:250px}
+.participants-section{flex:0 0 auto;max-height:200px;min-height:150px}
 .participants-section h3,.chat-section h3{font-size:1.1rem;margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem}
 .participants-list{overflow-y:auto;flex:1}
 .participant-item{display:flex;align-items:center;gap:0.75rem;padding:0.75rem;border-radius:12px;margin-bottom:0.5rem;transition:background 0.2s}
@@ -519,8 +519,8 @@ function escapeHtml(t) { const d = document.createElement('div'); d.textContent 
 .moderate-menu button:hover{background:rgba(255,255,255,0.05)}
 .moderate-menu button i{width:1.2rem}
 @keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-.chat-section{flex:1;min-height:0;display:flex;flex-direction:column}
-.chat-messages{flex:1;overflow-y:auto;margin-bottom:1rem;display:flex;flex-direction:column;gap:0.75rem;min-height:0}
+.chat-section{flex:1;min-height:0;display:flex;flex-direction:column;max-height:100%;overflow:hidden}
+.chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0.75rem;min-height:0;max-height:100%;padding-bottom:0.5rem}
 .chat-input-container{display:flex;gap:0.75rem;flex-shrink:0}
 .chat-welcome{text-align:center;padding:2rem;color:var(--text-dim)}
 .chat-welcome i{font-size:3rem;margin-bottom:1rem;opacity:0.5;display:block}
