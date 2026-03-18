@@ -145,8 +145,19 @@ async function checkUserAuth() {
     if (token) {
         try {
             const r = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
-            if (r.ok) currentUser = await r.json();
-            updateModerationUI();
+            if (r.ok) {
+                currentUser = await r.json();
+
+                // Отобразить аватар текущего пользователя в форме комментариев
+                const commentAvatar = document.getElementById('commentUserAvatar');
+                if (currentUser.avatar_url) {
+                    commentAvatar.innerHTML = `<img src="${currentUser.avatar_url}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">`;
+                } else {
+                    commentAvatar.innerHTML = '<i class="fas fa-user-circle"></i>';
+                }
+
+                updateModerationUI();
+            }
         } catch (e) {}
     }
 }
@@ -370,6 +381,15 @@ async function loadChannel(chId) {
             currentChannel = await r.json();
             document.getElementById('channelName').textContent = currentChannel.name;
             document.getElementById('channelSubs').textContent = currentChannel.subscriber_count + ' подписчиков';
+
+            // Отобразить аватар владельца канала
+            const avatarDiv = document.querySelector('.channel-avatar-small');
+            if (currentVideo && currentVideo.channel && currentVideo.channel.avatar_url) {
+                avatarDiv.innerHTML = `<img src="${currentVideo.channel.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+            } else {
+                avatarDiv.innerHTML = '<i class="fas fa-tv"></i>';
+            }
+
             if (currentUser) await checkSubscription();
         }
     } catch (e) {}

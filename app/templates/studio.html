@@ -528,7 +528,7 @@ function showAvatarCropper(input) {
         img.src = e.target.result;
 
         document.getElementById('cropperTitle').textContent = 'Обрезать аватар';
-        document.getElementById('cropperModal').classList.add('show');
+        document.getElementById('cropperModal').style.display = 'flex';
 
         if (currentCropper) {
             currentCropper.destroy();
@@ -567,7 +567,7 @@ function showBannerCropper(input) {
         img.src = e.target.result;
 
         document.getElementById('cropperTitle').textContent = 'Обрезать баннер';
-        document.getElementById('cropperModal').classList.add('show');
+        document.getElementById('cropperModal').style.display = 'flex';
 
         if (currentCropper) {
             currentCropper.destroy();
@@ -594,7 +594,7 @@ function showBannerCropper(input) {
 }
 
 function closeCropperModal() {
-    document.getElementById('cropperModal').classList.remove('show');
+    document.getElementById('cropperModal').style.display = 'none';
     if (currentCropper) {
         currentCropper.destroy();
         currentCropper = null;
@@ -1005,6 +1005,18 @@ textarea.form-control {
 
 .studio-video-actions button {
     margin-left: 0.5rem;
+}
+
+#cropperModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
 }
 
 #cropperModal .modal-content {

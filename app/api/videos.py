@@ -271,6 +271,14 @@ def get_feed():
     def video_to_feed(v):
         ch = Channel.query.get(v.channel_id)
         comments_count = VideoComment.query.filter_by(video_id=v.id, deleted_at=None).count()
+        channel_data = None
+        if ch:
+            author = User.query.get(ch.author_id)
+            channel_data = {
+                'id': ch.id,
+                'name': ch.name,
+                'avatar_url': author.avatar_url if author else None
+            }
         return {
             'id': v.id,
             'title': v.title,
@@ -285,7 +293,7 @@ def get_feed():
             'comments_count': comments_count,
             'thumbnail_url': video_service.get_thumbnail_url(v),
             'created_at': v.created_at.isoformat(),
-            'channel': {'id': ch.id, 'name': ch.name} if ch else None
+            'channel': channel_data
         }
 
     new_videos = sorted(all_videos, key=lambda v: v.created_at, reverse=True)[:12]

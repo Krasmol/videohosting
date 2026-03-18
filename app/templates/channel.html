@@ -36,8 +36,12 @@
     </div>
     <div class="channel-tab-content" id="tab-about">
         <div class="channel-about-section">
+            <div class="about-block" id="aboutBioBlock" style="display:none;">
+                <h3><i class="fas fa-user"></i> О создателе</h3>
+                <p id="aboutBio" style="color:var(--text);line-height:1.6;white-space:pre-wrap;"></p>
+            </div>
             <div class="about-block">
-                <h3><i class="fas fa-info-circle"></i> Описание</h3>
+                <h3><i class="fas fa-info-circle"></i> Описание канала</h3>
                 <p id="aboutDescription">Нет описания</p>
             </div>
             <div class="about-block">
@@ -154,6 +158,12 @@ async function loadChannelData() {
             // Отобразить аватарку владельца канала если есть
             if (owner.avatar_url) {
                 document.getElementById('channelAvatar').innerHTML = `<img src="${owner.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+            }
+
+            // Отобразить био владельца канала если есть
+            if (owner.bio && owner.bio.trim()) {
+                document.getElementById('aboutBio').textContent = owner.bio;
+                document.getElementById('aboutBioBlock').style.display = 'block';
             }
         }
 

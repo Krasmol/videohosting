@@ -63,7 +63,13 @@ async function loadProfile() {
 
         document.getElementById('profileName').textContent = profileUser.display_name;
         document.getElementById('profileTag').textContent = profileUser.tag;
-        document.getElementById('profileBio').textContent = profileUser.bio || '';
+        const bioElement = document.getElementById('profileBio');
+        if (profileUser.bio && profileUser.bio.trim()) {
+            bioElement.textContent = profileUser.bio;
+            bioElement.style.display = 'block';
+        } else {
+            bioElement.style.display = 'none';
+        }
         document.getElementById('profileDate').innerHTML = `<i class="fas fa-calendar"></i> На платформе с ${new Date(profileUser.created_at).toLocaleDateString('ru-RU')}`;
         let badges = '';
         if (profileUser.is_vip) badges += '<span class="badge badge-vip"><i class="fas fa-crown"></i> VIP</span>';
@@ -133,7 +139,7 @@ async function buyVip() {
 .profile-info{flex:1}
 .profile-info h1{font-size:2rem;font-weight:800;margin-bottom:0.25rem}
 .profile-tag{color:var(--text-dim);font-size:1.1rem;margin-bottom:0.5rem}
-.profile-bio{color:var(--text-dim);margin-bottom:0.75rem;white-space:pre-wrap}
+.profile-bio{color:var(--text);margin-bottom:0.75rem;white-space:pre-wrap;line-height:1.6}
 .profile-badges{display:flex;gap:0.5rem;margin-bottom:0.75rem}
 .badge{padding:0.35rem 0.75rem;border-radius:50px;font-size:0.8rem;font-weight:600;display:inline-flex;align-items:center;gap:0.35rem}
 .badge-vip{background:rgba(255,193,7,0.15);color:#ffc107;border:1px solid rgba(255,193,7,0.3)}
